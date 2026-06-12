@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  background-color: #160d0b;
+  color: #f3e9dc;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden; /* red de seguridad contra desbordes horizontales en móvil */
+}
