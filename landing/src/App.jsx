@@ -68,10 +68,12 @@ const techLogos = [
   { node: <SiCss />, title: "CSS3", href: "https://developer.mozilla.org/docs/Web/CSS" },
 ]
 
+const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL || 'http://localhost:5173/'
+
 const wa = (msg) =>
   `https://wa.me/${PRODUCTO.whatsapp}?text=${encodeURIComponent(msg)}`
 
-const DEMO_MSG = `Hola, vi la web de ${PRODUCTO.name} y quiero una demo del software para mi carnicería.`
+const DEMO_MSG = `Hola, vi la web de ${PRODUCTO.name} y quiero más información sobre el software para mi carnicería.`
 
 // ----- Funciones del software -----
 const FUNCIONES = [
@@ -260,14 +262,12 @@ function Nav() {
           <a href="#contacto" className="transition-colors hover:text-[#f59e0b]">Contacto</a>
         </nav>
         <Boton
-          href={wa(DEMO_MSG)}
-          target="_blank"
-          rel="noreferrer"
-          className="px-5 py-2.5 text-sm"
+          href={DASHBOARD_URL}
+          className="px-5 py-2.5 text-sm font-bold shadow-lg shadow-[#dc2626]/25 hover:shadow-[#dc2626]/40"
         >
-          <WhatsAppIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">Solicitar demo</span>
-          <span className="sm:hidden">Demo</span>
+          <span className="hidden sm:inline">Iniciar sesión</span>
+          <span className="sm:hidden">Acceder</span>
+          <ArrowRightIcon className="h-4 w-4" />
         </Boton>
       </div>
     </header>
@@ -313,9 +313,9 @@ function Hero() {
           </Reveal>
           <Reveal delay={300}>
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <Boton href={wa(DEMO_MSG)} target="_blank" rel="noreferrer" className="px-8 py-4 text-lg">
-                <WhatsAppIcon className="h-5 w-5" />
-                Solicitar demo gratis
+              <Boton href={DASHBOARD_URL} className="px-8 py-4 text-lg font-bold shadow-xl shadow-[#dc2626]/30">
+                Iniciar sesión
+                <ArrowRightIcon className="h-5 w-5" />
               </Boton>
               <Boton href="#funciones" variant="ghost" className="px-8 py-4 text-lg">
                 Ver qué hace
@@ -703,13 +703,13 @@ function CTAFinal() {
             puede ordenar y hacer crecer tu negocio.
           </p>
           <div className="mt-8 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-center">
-            <Boton href={wa(DEMO_MSG)} target="_blank" rel="noreferrer" className="w-full px-8 py-4 text-base sm:w-auto sm:text-lg">
-              <WhatsAppIcon className="h-5 w-5" />
-              Solicitar demo por WhatsApp
+            <Boton href={DASHBOARD_URL} className="w-full px-8 py-4 text-base font-bold sm:w-auto sm:text-lg">
+              Iniciar sesión en el software
+              <ArrowRightIcon className="h-5 w-5" />
             </Boton>
-            <Boton href={`mailto:${PRODUCTO.email}`} variant="ghost" className="w-full px-8 py-4 text-base sm:w-auto sm:text-lg">
-              <MailIcon className="h-5 w-5" />
-              Escríbenos
+            <Boton href={wa(DEMO_MSG)} target="_blank" rel="noreferrer" variant="ghost" className="w-full px-8 py-4 text-base sm:w-auto sm:text-lg">
+              <WhatsAppIcon className="h-5 w-5 text-[#25d366]" />
+              Hablar por WhatsApp
             </Boton>
           </div>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 text-sm text-[#cbb8a7] sm:flex-row sm:gap-8">
