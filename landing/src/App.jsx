@@ -26,8 +26,6 @@ import {
   MailIcon,
   ChartIcon,
   ClipboardIcon,
-  CrownIcon,
-  WalletIcon,
   ScaleIcon,
   BoxIcon,
   SparklesIcon,
@@ -90,18 +88,6 @@ const FUNCIONES = [
     accent: "from-[#ea580c] to-[#9a3412]",
   },
   {
-    icon: CrownIcon,
-    title: "Promos para clientes VIP",
-    text: "El sistema identifica a tus mejores clientes y les aplica descuentos automáticos para que vuelvan más seguido.",
-    accent: "from-[#eab308] to-[#a16207]",
-  },
-  {
-    icon: WalletIcon,
-    title: "Pagos de nómina",
-    text: "Calcula y administra el pago de tus empleados, horas y adelantos. Todo claro a fin de mes.",
-    accent: "from-[#16a34a] to-[#166534]",
-  },
-  {
     icon: BoxIcon,
     title: "Control de inventario",
     text: "Stock de carne, mermas y faltantes en tiempo real. Sabes exactamente qué tienes y qué te falta.",
@@ -147,8 +133,6 @@ const PLANES = [
     features: [
       "Todo lo del plan Básico",
       "Cálculo inteligente de la res",
-      "Clientes VIP y promos",
-      "Pagos de nómina",
       "Hasta 5 usuarios",
     ],
   },
@@ -322,9 +306,9 @@ function Hero() {
           </Reveal>
           <Reveal delay={200}>
             <p className="mt-6 max-w-lg text-lg text-[#cbb8a7] sm:text-xl">
-              {PRODUCTO.name} reúne contabilidad, pedidos, nómina, clientes VIP e
-              inventario en un solo lugar — y calcula cuánta carne aprovechas de
-              cada res. Menos pérdidas, más control, más utilidad.
+              {PRODUCTO.name} reúne contabilidad, pedidos e inventario en un solo
+              lugar — y calcula cuánta carne aprovechas de cada res. Menos pérdidas,
+              más control, más utilidad.
             </p>
           </Reveal>
           <Reveal delay={300}>
@@ -839,7 +823,9 @@ function Footer() {
             <h4 className="text-sm font-semibold uppercase tracking-wider text-[#f3e9dc]">
               Desarrollado por
             </h4>
-            <p className="mt-4 text-sm font-semibold text-[#e7d8c8]">{PRODUCTO.owner}</p>
+            <p className="mt-4 text-sm font-semibold text-[#e7d8c8]">
+              Ne<span className="text-blue-500 font-bold">X</span>o <span className="text-xs font-normal text-[#a18b7a]">by: Brayan Cardozo</span>
+            </p>
             <p className="mt-1 text-sm text-[#a18b7a]">
               ¿Quieres un software para tu negocio? Escríbeme.
             </p>
