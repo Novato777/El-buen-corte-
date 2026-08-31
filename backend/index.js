@@ -1231,10 +1231,10 @@ app.delete('/api/inventario/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Abastecer stock de un producto
+// Abastecer stock de un producto (con costo real pagado al proveedor)
 app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
-    const { productoId, cantidad, unidad } = req.body;
+    const { productoId, cantidad, unidad, costoTotal, metodoPago } = req.body;
     const rawQty = Number(cantidad);
 
     if (isNaN(rawQty) || rawQty <= 0) {
@@ -1257,19 +1257,41 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
     
     await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, productoId]);
 
-    // Registrar egreso estimado en contabilidad (70% del valor de venta como costo de compra)
-    const costoEstimado = Math.round(Number(prod.precio_venta) * 0.7 * qtyInBaseUnit);
+    // Costo real pagado al proveedor (desvinculado por completo del precio de venta al cliente)
+    const parsedCost = Number(costoTotal);
+    const montoEgreso = (!isNaN(parsedCost) && parsedCost >= 0) ? parsedCost : 0;
     
-    const countTrx = await pool.query('SELECT count(*) FROM transacciones');
-    const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
-    const nowStr = new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'});
+    let trxResponse = null;
 
-    const insertTrx = await pool.query(
-      `INSERT INTO transacciones (id, tipo, descripcion, monto, fecha, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [trxId, 'Egreso', `Abastecimiento: +${rawQty} ${inputUnit} de ${prod.nombre}`, costoEstimado, nowStr, req.user.id]
-    );
+    if (montoEgreso > 0) {
+      const countTrx = await pool.query('SELECT count(*) FROM transacciones');
+      const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
+      const nowStr = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+      const insertTrx = await pool.query(
+        `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          trxId, 
+          'Egreso', 
+          `Compra / Abastecimiento: +${rawQty} ${inputUnit} de ${prod.nombre}`, 
+          montoEgreso, 
+          metodoPago || 'Efectivo', 
+          nowStr, 
+          req.user.id
+        ]
+      );
+
+      trxResponse = {
+        id: insertTrx.rows[0].id,
+        tipo: insertTrx.rows[0].tipo,
+        descripcion: insertTrx.rows[0].descripcion,
+        monto: Number(insertTrx.rows[0].monto),
+        metodoPago: insertTrx.rows[0].metodo_pago,
+        fecha: insertTrx.rows[0].fecha
+      };
+    }
 
     res.json({
       producto: {
@@ -1284,13 +1306,7 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
         stock: nuevoStock,
         limiteMin: Number(prod.limite_min)
       },
-      transaccion: {
-        id: insertTrx.rows[0].id,
-        tipo: insertTrx.rows[0].tipo,
-        descripcion: insertTrx.rows[0].descripcion,
-        monto: Number(insertTrx.rows[0].monto),
-        fecha: insertTrx.rows[0].fecha
-      }
+      transaccion: trxResponse
     });
   } catch (err) {
     console.error('Error al abastecer:', err);

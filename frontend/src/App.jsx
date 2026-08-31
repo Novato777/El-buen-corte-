@@ -502,6 +502,8 @@ function App() {
   const [newMermaReason, setNewMermaReason] = useState('')
   const [newStockProduct, setNewStockProduct] = useState('1')
   const [newStockWeight, setNewStockWeight] = useState(10.0)
+  const [newStockCost, setNewStockCost] = useState('')
+  const [newStockPaymentMethod, setNewStockPaymentMethod] = useState('Efectivo')
   const [newExpenseDesc, setNewExpenseDesc] = useState('')
   const [newExpenseAmount, setNewExpenseAmount] = useState(0)
   const [newExpensePaymentMethod, setNewExpensePaymentMethod] = useState('Efectivo')
@@ -1404,45 +1406,74 @@ function App() {
     }
   }
 
-  // Add stock handling
+  // Add stock handling (con costo real pagado al proveedor)
   const handleAddStock = async (e) => {
     if (e) e.preventDefault()
     if (addStockSubmittingRef.current || addStockSubmitting) return
-    const prod = inventario.find(i => i.id === newStockProduct)
+    const prod = inventario.find(i => String(i.id) === String(newStockProduct))
     if (!prod) return
+
+    const qtyNumber = Number(newStockWeight)
+    if (isNaN(qtyNumber) || qtyNumber <= 0) {
+      alert('Por favor ingresa una cantidad válida mayor a 0.')
+      return
+    }
+
+    const parsedCost = parseFormattedNumber(newStockCost) || Number(newStockCost) || 0
+    if (isNaN(parsedCost) || parsedCost < 0) {
+      alert('El costo total de compra debe ser un número válido mayor o igual a 0.')
+      return
+    }
 
     addStockSubmittingRef.current = true
     setAddStockSubmitting(true)
 
+    const payload = {
+      productoId: newStockProduct,
+      cantidad: qtyNumber,
+      costoTotal: parsedCost,
+      metodoPago: newStockPaymentMethod
+    }
+
     try {
-      await fetch(`${API_BASE}/inventario/abastecer`, {
+      const res = await fetch(`${API_BASE}/inventario/abastecer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
-        body: JSON.stringify({ productoId: newStockProduct, cantidad: Number(newStockWeight) })
+        body: JSON.stringify(payload)
       })
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || 'Error al abastecer inventario')
+      }
       await loadData()
+      alert(`✅ ¡Abastecimiento registrado con éxito!\n\n• +${qtyNumber} ${getUnitLabel(prod.unidadMedida)} ingresados a "${prod.nombre}".\n• Egreso de caja registrado: ${formatCOP(parsedCost)} (${newStockPaymentMethod}).`)
     } catch (err) {
+      console.warn('Error al abastecer en backend, aplicando cambios localmente:', err)
       // Local fallback
       setInventario(prev => prev.map(i => {
-        if (i.id === newStockProduct) {
-          return { ...i, stock: i.stock + Number(newStockWeight) }
+        if (String(i.id) === String(newStockProduct)) {
+          return { ...i, stock: Number(i.stock) + qtyNumber }
         }
         return i
       }))
-      const costEstimate = Math.round(prod.precioVenta * 0.7 * newStockWeight)
-      const newTrx = {
-        id: `TRX-${100 + transacciones.length + 1}`,
-        tipo: 'Egreso',
-        descripcion: `Abastecimiento: +${newStockWeight}kg ${prod.nombre}`,
-        monto: costEstimate,
-        fecha: new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'})
+      if (parsedCost > 0) {
+        const newTrx = {
+          id: `TRX-${100 + transacciones.length + 1}`,
+          tipo: 'Egreso',
+          descripcion: `Compra / Abastecimiento: +${qtyNumber} ${getUnitLabel(prod.unidadMedida)} de ${prod.nombre}`,
+          monto: parsedCost,
+          metodoPago: newStockPaymentMethod,
+          fecha: new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'})
+        }
+        setTransacciones(prev => [newTrx, ...prev])
       }
-      setTransacciones(prev => [newTrx, ...prev])
+      alert(`✅ ¡Abastecimiento registrado (Modo local)!\n\n• +${qtyNumber} ${getUnitLabel(prod.unidadMedida)} a "${prod.nombre}".\n• Egreso: ${formatCOP(parsedCost)}.`)
     } finally {
       addStockSubmittingRef.current = false
       setAddStockSubmitting(false)
+      setShowAddStockModal(false)
+      setNewStockCost('')
     }
-    setShowAddStockModal(false)
   }
 
   // Record Merma handling
@@ -3230,6 +3261,9 @@ function App() {
                                   style={{ flex: 1, padding: '7px', fontSize: '11.5px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', borderRadius: '10px' }}
                                   onClick={() => {
                                     setNewStockProduct(item.id);
+                                    setNewStockWeight(item.unidadMedida === 'und' ? 10 : 5);
+                                    setNewStockCost('');
+                                    setNewStockPaymentMethod('Efectivo');
                                     setShowAddStockModal(true);
                                   }}
                                 >
@@ -5384,87 +5418,120 @@ function App() {
       {/* ================================================================= */}
       {/* MODAL: ABASTECER INVENTARIO */}
       {/* ================================================================= */}
-      {showAddStockModal && (
-        <div className="modal-overlay" onClick={() => !addStockSubmitting && setShowAddStockModal(false)}>
-          <form 
-            className="modal-card animate-fade-in" 
-            onSubmit={handleAddStock}
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '520px', width: '92%', borderRadius: '20px', overflow: 'hidden' }}
-          >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '20px',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
-                }}>
-                  📦
-                </div>
-                <div>
-                  <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
-                    Abastecer Inventario
-                  </h3>
-                  <p style={{ fontSize: '12.5px', color: '#64748b', margin: '3px 0 0 0' }}>
-                    Ingresa nuevo pesaje de corte para reponer existencias
-                  </p>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setShowAddStockModal(false)}
-                disabled={addStockSubmitting}
-                style={{ 
-                  border: 'none', 
-                  background: '#e2e8f0', 
-                  width: '32px', 
-                  height: '32px', 
-                  borderRadius: '50%', 
-                  fontSize: '14px', 
-                  cursor: 'pointer', 
-                  color: '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
-            </div>
+      {showAddStockModal && (() => {
+        const curProd = inventario.find(i => String(i.id) === String(newStockProduct)) || inventario[0]
+        const u = normalizeUnit(curProd?.unidadMedida)
+        const isUnd = u === 'und'
+        const qtyNum = Number(newStockWeight) || 0
+        const costNum = parseFormattedNumber(newStockCost) || Number(newStockCost) || 0
+        const unitCostCalc = qtyNum > 0 && costNum > 0 ? Math.round(costNum / qtyNum) : 0
+        const salePrice = Number(curProd?.precioVenta || 0)
+        const profitPerUnit = salePrice > 0 && unitCostCalc > 0 ? (salePrice - unitCostCalc) : 0
+        const marginPercent = unitCostCalc > 0 ? Math.round((profitPerUnit / unitCostCalc) * 100) : 0
 
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                  Producto / Corte a Ingresar *
-                </label>
-                <select 
-                  className="input-control"
-                  value={newStockProduct}
-                  onChange={(e) => setNewStockProduct(e.target.value)}
-                  style={{ fontSize: '13.5px', fontWeight: '600' }}
+        return (
+          <div className="modal-overlay" onClick={() => !addStockSubmitting && setShowAddStockModal(false)}>
+            <form 
+              className="modal-card animate-fade-in" 
+              onSubmit={handleAddStock}
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '540px', width: '92%', borderRadius: '22px', overflow: 'hidden' }}
+            >
+              <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '22px',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
+                  }}>
+                    📦
+                  </div>
+                  <div>
+                    <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                      Abastecer Inventario
+                    </h3>
+                    <p style={{ fontSize: '12.5px', color: '#64748b', margin: '3px 0 0 0' }}>
+                      Ingresa existencias y registra el monto real pagado al proveedor
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddStockModal(false)}
+                  disabled={addStockSubmitting}
+                  style={{ 
+                    border: 'none', 
+                    background: '#e2e8f0', 
+                    width: '32px', 
+                    height: '32px', 
+                    borderRadius: '50%', 
+                    fontSize: '14px', 
+                    cursor: 'pointer', 
+                    color: '#475569',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  {inventario.map(i => (
-                    <option key={i.id} value={i.id}>{i.nombre} — (Stock actual: {formatStockDisplay(i.stock, i.unidadMedida)})</option>
-                  ))}
-                </select>
+                  ✕
+                </button>
               </div>
 
-              {(() => {
-                const curProd = inventario.find(i => String(i.id) === String(newStockProduct)) || inventario[0]
-                const u = normalizeUnit(curProd?.unidadMedida)
-                const isUnd = u === 'und'
+              <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Producto Selector */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                    Producto / Corte a Abastecer *
+                  </label>
+                  <select 
+                    className="input-control"
+                    value={newStockProduct}
+                    onChange={(e) => setNewStockProduct(e.target.value)}
+                    style={{ fontSize: '14px', fontWeight: '600' }}
+                  >
+                    {inventario.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.nombre} — (Stock actual: {formatStockDisplay(i.stock, i.unidadMedida)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                return (
+                {/* Banner de Referencia: Precio de Venta al Cliente */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>
+                      Precio de Venta al Público (Cliente)
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', marginTop: '2px' }}>
+                      {formatCOP(curProd?.precioVenta)} <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>/ {getUnitLabel(u)}</span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '8px', fontWeight: '700' }}>
+                    🔒 Precio de Venta Intacto
+                  </span>
+                </div>
+
+                {/* Grid: Cantidad + Método de Pago */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                      Cantidad a Añadir ({isUnd ? 'unidades' : u}) *
+                      Cantidad a Añadir *
                     </label>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                       <input 
@@ -5475,6 +5542,7 @@ function App() {
                         value={newStockWeight}
                         onChange={(e) => setNewStockWeight(isUnd ? Math.round(Number(e.target.value)) : e.target.value)}
                         required
+                        placeholder="Ej. 20"
                         style={{ fontSize: '15px', fontWeight: '700', padding: '0 45px 0 14px', height: '44px' }}
                       />
                       <span style={{ position: 'absolute', right: '12px', fontSize: '12px', color: '#64748b', fontWeight: '700', pointerEvents: 'none' }}>
@@ -5482,41 +5550,122 @@ function App() {
                       </span>
                     </div>
                   </div>
-                )
-              })()}
 
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <span style={{ fontSize: '18px' }}>💡</span>
-                <p style={{ fontSize: '12px', color: '#1e40af', margin: 0, lineHeight: 1.4 }}>
-                  Al abastecer, el stock se actualiza automáticamente en el catálogo y en la tienda virtual para clientes.
-                </p>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                      Método de Pago del Egreso
+                    </label>
+                    <select
+                      className="input-control"
+                      value={newStockPaymentMethod}
+                      onChange={(e) => setNewStockPaymentMethod(e.target.value)}
+                      style={{ fontSize: '13.5px', fontWeight: '600', height: '44px' }}
+                    >
+                      <option value="Efectivo">💵 Efectivo (Caja)</option>
+                      <option value="Transferencia">📱 Transferencia</option>
+                      <option value="Tarjeta">💳 Tarjeta / Datáfono</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Costo Total Real de Compra (Proveedor) */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: '800', fontSize: '13.5px', color: '#dc2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>💰 Costo Total Pagado al Proveedor (COP) *</span>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>Egreso de Caja</span>
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      className="input-control" 
+                      value={formatNumberWithDots(newStockCost)}
+                      onChange={(e) => setNewStockCost(parseFormattedNumber(e.target.value))}
+                      placeholder="Ej. 18.000"
+                      required
+                      style={{ 
+                        fontSize: '17px', 
+                        fontWeight: '800', 
+                        padding: '0 50px 0 14px', 
+                        height: '46px',
+                        border: '2px solid #fca5a5',
+                        backgroundColor: '#fffaf0'
+                      }}
+                    />
+                    <span style={{ position: 'absolute', right: '14px', fontSize: '13px', color: '#dc2626', fontWeight: '800', pointerEvents: 'none' }}>
+                      COP
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '11.5px', color: '#64748b', margin: '4px 0 0 0' }}>
+                    Ingresa el monto total real que le pagaste al proveedor por estas {qtyNum} {getUnitLabel(u)}.
+                  </p>
+                </div>
+
+                {/* Desglose & Margen Estimado si se ingresó costo */}
+                {costNum > 0 && qtyNum > 0 && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                      <span style={{ color: '#166534', fontWeight: '600' }}>Costo Real por {getUnitLabel(u)}:</span>
+                      <strong style={{ color: '#15803d' }}>{formatCOP(unitCostCalc)} / {getUnitLabel(u)}</strong>
+                    </div>
+                    {salePrice > unitCostCalc && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', borderTop: '1px dashed #bbf7d0', paddingTop: '4px', marginTop: '2px' }}>
+                        <span style={{ color: '#166534', fontWeight: '600' }}>Margen de ganancia estimado:</span>
+                        <strong style={{ color: '#047857' }}>+{formatCOP(profitPerUnit)} ({marginPercent}%)</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Cuadro aclaratorio de diferenciación financiera */}
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '18px', lineHeight: 1 }}>💡</span>
+                  <div style={{ fontSize: '11.5px', color: '#1e40af', lineHeight: 1.45 }}>
+                    <strong>Diferenciación Financiera:</strong>
+                    <div style={{ marginTop: '2px' }}>
+                      • <strong>Precio de Venta ({formatCOP(curProd?.precioVenta)}):</strong> Lo que cobras al cliente.
+                    </div>
+                    <div>
+                      • <strong>Costo de Compra ({formatCOP(costNum || 0)}):</strong> Lo que pagaste al proveedor. Este es el monto que se registrará como egreso y se descontará de caja.
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => setShowAddStockModal(false)}
-                disabled={addStockSubmitting}
-              >
-                Cancelar
-              </button>
-              <button 
-                type="submit" 
-                className="btn btn-success"
-                disabled={addStockSubmitting}
-                style={{ 
-                  opacity: addStockSubmitting ? 0.65 : 1, 
-                  cursor: addStockSubmitting ? 'not-allowed' : 'pointer' 
-                }}
-              >
-                {addStockSubmitting ? '⏳ Abasteciendo...' : '✓ Abastecer Corte'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowAddStockModal(false)}
+                  disabled={addStockSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-success"
+                  disabled={addStockSubmitting}
+                  style={{ 
+                    opacity: addStockSubmitting ? 0.65 : 1, 
+                    cursor: addStockSubmitting ? 'not-allowed' : 'pointer',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
+                  }}
+                >
+                  {addStockSubmitting ? '⏳ Guardando Abastecimiento...' : '✓ Confirmar Abastecimiento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )
+      })()}
 
       {/* ================================================================= */}
       {/* 🏷️ MODAL: CONFIGURAR DESCUENTO EN PRODUCTO */}
