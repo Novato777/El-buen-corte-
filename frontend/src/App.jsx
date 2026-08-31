@@ -1136,11 +1136,11 @@ function App() {
   const hasUnsavedChanges = JSON.stringify(profileData) !== JSON.stringify(profileForm)
   const totalVentasHoy = transacciones
     .filter(t => t.tipo === 'Ingreso')
-    .reduce((acc, t) => acc + t.monto, 0)
+    .reduce((acc, t) => acc + Number(t.monto || 0), 0)
 
   const totalEgresosHoy = transacciones
     .filter(t => t.tipo === 'Egreso')
-    .reduce((acc, t) => acc + t.monto, 0)
+    .reduce((acc, t) => acc + Number(t.monto || 0), 0)
 
   const saldoCajaActual = cajaBase + totalVentasHoy - totalEgresosHoy
 
@@ -1833,8 +1833,8 @@ function App() {
       const ingresos = transacciones.filter(t => t.tipo === 'Ingreso')
       const egresos = transacciones.filter(t => t.tipo === 'Egreso')
       
-      const sumIngresos = ingresos.reduce((acc, t) => acc + t.monto, 0)
-      const sumEgresos = egresos.reduce((acc, t) => acc + t.monto, 0)
+      const sumIngresos = ingresos.reduce((acc, t) => acc + Number(t.monto || 0), 0)
+      const sumEgresos = egresos.reduce((acc, t) => acc + Number(t.monto || 0), 0)
       const balance = sumIngresos - sumEgresos
       
       doc.setFont("helvetica", "normal")
