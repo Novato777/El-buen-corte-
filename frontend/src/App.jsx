@@ -958,6 +958,7 @@ function App() {
   // ⚡ Sincronización en tiempo real (BroadcastChannel, Storage Events y Polling)
   useEffect(() => {
     if (!currentUser || currentUser.rol === 'superadmin') return
+    const myTenantId = currentUser.tenant_id || currentUser.id
 
     // 1. Canal BroadcastChannel entre pestañas (Tienda -> Dashboard)
     let bc;
@@ -966,10 +967,13 @@ function App() {
         bc = new BroadcastChannel('el_buen_corte_channel')
         bc.onmessage = (event) => {
           if (event.data && event.data.type === 'NUEVO_PEDIDO') {
-            triggerNewOrderAlert(event.data)
-            fetchNotificaciones()
-            if (activeTab === 'pedidos' || activeTab === 'resumen') {
-              loadData()
+            const incomingTenant = event.data.tenantId
+            if (!incomingTenant || Number(incomingTenant) === Number(myTenantId)) {
+              triggerNewOrderAlert(event.data)
+              fetchNotificaciones()
+              if (activeTab === 'pedidos' || activeTab === 'resumen') {
+                loadData()
+              }
             }
           }
         }
@@ -983,10 +987,13 @@ function App() {
       if (e.key === 'el_buen_corte_new_order_ping' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue)
-          triggerNewOrderAlert(parsed)
-          fetchNotificaciones()
-          if (activeTab === 'pedidos' || activeTab === 'resumen') {
-            loadData()
+          const incomingTenant = parsed.tenantId
+          if (!incomingTenant || Number(incomingTenant) === Number(myTenantId)) {
+            triggerNewOrderAlert(parsed)
+            fetchNotificaciones()
+            if (activeTab === 'pedidos' || activeTab === 'resumen') {
+              loadData()
+            }
           }
         } catch (err) {}
       }
@@ -2453,12 +2460,12 @@ function App() {
           </div>
 
           <a
-            href="/tienda"
+            href={`/tienda?tenant=${currentUser?.tenant_id || currentUser?.id || 1}`}
             target="_blank"
             rel="noopener noreferrer"
             className="nav-item"
             style={{ textDecoration: 'none' }}
-            title="Abrir Tienda Virtual en pestaña nueva para clientes"
+            title="Abrir Tienda Virtual de su sede en pestaña nueva para clientes"
             onClick={() => setMobileMenuOpen(false)}
           >
             <span className="nav-icon"><ShoppingBagIcon /></span>
@@ -8836,7 +8843,8 @@ function SuperAdminPortal({
   const openEditModal = (user) => {
     setEditUserId(user.id)
     setEditUserNombre(user.nombre)
-    setEditUserEmail(user.email)
+    setEditUserEmail(user.email || '')
+    setEditUserUsername(user.username || '')
     setEditUserRol(user.rol)
     setEditUserActivo(user.activo !== false)
     setEditUserError('')
@@ -9143,6 +9151,7 @@ function SuperAdminPortal({
                         <th>ID</th>
                         <th>Usuario / Consumidor</th>
                         <th>Rol</th>
+                        <th>Sede / Tenant</th>
                         <th>Estado</th>
                         <th>Registro</th>
                         <th style={{ textAlign: 'right' }}>Acciones Maestras</th>
@@ -9205,6 +9214,23 @@ function SuperAdminPortal({
                             <td>
                               <span className={`role-badge ${roleBadge}`}>
                                 <span>{roleIcon}</span> {roleText}
+                              </span>
+                            </td>
+
+                            <td>
+                              <span style={{ 
+                                fontSize: '11px', 
+                                fontWeight: '700', 
+                                color: u.rol === 'superadmin' ? '#7c3aed' : (u.tenant_id ? '#2563eb' : '#64748b'), 
+                                background: u.rol === 'superadmin' ? '#f5f3ff' : (u.tenant_id ? '#eff6ff' : '#f1f5f9'), 
+                                padding: '3px 9px', 
+                                borderRadius: '6px',
+                                border: `1px solid ${u.rol === 'superadmin' ? '#ddd6fe' : (u.tenant_id ? '#bfdbfe' : '#e2e8f0')}`,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                {u.rol === 'superadmin' ? '👑 Global' : (u.tenant_id ? `🏢 Sede #${u.tenant_id}` : '—')}
                               </span>
                             </td>
 

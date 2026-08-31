@@ -98,6 +98,16 @@ const formatCOP = (val) => {
   });
 };
 
+// Helper para resolver el Tenant ID de la petición de forma segura
+const getReqTenantId = (req) => {
+  if (req.user?.rol === 'superadmin') {
+    if (req.query?.tenantId) return parseInt(req.query.tenantId, 10);
+    if (req.headers['x-tenant-id']) return parseInt(req.headers['x-tenant-id'], 10);
+    return req.user?.tenant_id || 1;
+  }
+  return req.user?.tenant_id || req.user?.id || 1;
+};
+
 // Datos de Perfil por Defecto (como fallback y seed inicial)
 const DEFAULT_PROFILE = {
   general: {
@@ -153,6 +163,39 @@ const DEFAULT_PROFILE = {
   }
 };
 
+// Helper para asegurar perfil de negocio inicial por tenant
+const ensureTenantProfile = async (tenantId, tenantName = '') => {
+  if (!tenantId) return;
+  try {
+    const check = await pool.query('SELECT id FROM business_profile WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+    if (check.rows.length === 0) {
+      const customGeneral = {
+        ...DEFAULT_PROFILE.general,
+        nombre: tenantName || `El Buen Corte - Sede #${tenantId}`,
+        razonSocial: tenantName ? `${tenantName} S.A.S.` : `El Buen Corte #${tenantId} S.A.S.`
+      };
+      await pool.query(
+        `INSERT INTO business_profile (general, identidad, contacto, ubicacion, redes, horarios, financiero, adicional, tenant_id, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+        [
+          JSON.stringify(customGeneral),
+          JSON.stringify(DEFAULT_PROFILE.identidad),
+          JSON.stringify(DEFAULT_PROFILE.contacto),
+          JSON.stringify(DEFAULT_PROFILE.ubicacion),
+          JSON.stringify(DEFAULT_PROFILE.redes),
+          JSON.stringify(DEFAULT_PROFILE.horarios),
+          JSON.stringify(DEFAULT_PROFILE.financiero),
+          JSON.stringify(DEFAULT_PROFILE.adicional),
+          tenantId
+        ]
+      );
+      console.log(`🏢 Perfil de negocio creado automáticamente para el tenant #${tenantId}.`);
+    }
+  } catch (err) {
+    console.error(`Error al asegurar perfil para tenant #${tenantId}:`, err.message);
+  }
+};
+
 // Inicializar todas las tablas y datos iniciales en PostgreSQL
 const initDatabase = async () => {
   try {
@@ -166,10 +209,15 @@ const initDatabase = async () => {
         password VARCHAR(255) NOT NULL,
         rol VARCHAR(50) NOT NULL DEFAULT 'admin',
         activo BOOLEAN NOT NULL DEFAULT true,
+        tenant_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username VARCHAR(100);
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+
+      -- Migración automática: los administradores sin tenant_id son sus propios tenants
+      UPDATE usuarios SET tenant_id = id WHERE tenant_id IS NULL AND rol != 'superadmin';
     `);
 
     // 1.1 Asegurar Super Administrador por defecto
@@ -179,8 +227,8 @@ const initDatabase = async () => {
     if (superCheck.rows.length === 0) {
       const superPasswordHash = await bcrypt.hash('superadmin123', 10);
       await pool.query(
-        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5)`,
-        ['Super Administrador Master', 'superadmin@elbuencorte.com', 'superadmin', superPasswordHash, 'superadmin']
+        `INSERT INTO usuarios (nombre, email, username, password, rol, tenant_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+        ['Super Administrador Master', 'superadmin@elbuencorte.com', 'superadmin', superPasswordHash, 'superadmin', null]
       );
       console.log('👑 Super Administrador creado: superadmin@elbuencorte.com / superadmin123');
     }
@@ -191,11 +239,13 @@ const initDatabase = async () => {
     );
     if (adminCheck.rows.length === 0) {
       const defaultPasswordHash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5)`,
+      const insertedAdmin = await pool.query(
+        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         ['Administrador El Buen Corte', 'admin@elbuencorte.com', 'admin', defaultPasswordHash, 'admin']
       );
-      console.log('👤 Usuario Administrador creado: admin@elbuencorte.com / admin123');
+      const adminId = insertedAdmin.rows[0].id;
+      await pool.query('UPDATE usuarios SET tenant_id = $1 WHERE id = $1', [adminId]);
+      console.log(`👤 Usuario Administrador inicial creado con tenant #${adminId}: admin@elbuencorte.com / admin123`);
     }
 
     // 2. Tabla de Notificaciones
@@ -208,8 +258,11 @@ const initDatabase = async () => {
         leida BOOLEAN NOT NULL DEFAULT false,
         referencia_id VARCHAR(50),
         metadata JSONB,
+        tenant_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      UPDATE notificaciones SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
     // 3. Tabla de Perfil de Negocio
@@ -228,6 +281,7 @@ const initDatabase = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE business_profile ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      UPDATE business_profile SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
     // 4. Tabla de Inventario de Productos
@@ -248,6 +302,8 @@ const initDatabase = async () => {
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS foto TEXT;
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS descuento NUMERIC(5, 2) NOT NULL DEFAULT 0;
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS unidad_medida VARCHAR(20) NOT NULL DEFAULT 'kg';
+      UPDATE inventario SET tenant_id = 1 WHERE tenant_id IS NULL;
+
       -- Migración automática para productos por unidad existentes
       UPDATE inventario 
       SET unidad_medida = 'und' 
@@ -275,6 +331,7 @@ const initDatabase = async () => {
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS direccion TEXT;
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50);
       ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notas TEXT;
+      UPDATE pedidos SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
     // 6. Tabla de Ítems del Pedido
@@ -303,6 +360,7 @@ const initDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE transacciones ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      UPDATE transacciones SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
     // 8. Tabla de Mermas
@@ -317,6 +375,7 @@ const initDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE mermas ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      UPDATE mermas SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
     // 9. Tabla de Simulaciones
@@ -332,17 +391,16 @@ const initDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE simulaciones ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      UPDATE simulaciones SET tenant_id = 1 WHERE tenant_id IS NULL;
     `);
 
-    // 10. Perfil de negocio inicial
-    const profileCheck = await pool.query('SELECT id FROM business_profile LIMIT 1');
+    // 10. Perfil de negocio inicial para tenant 1
+    const profileCheck = await pool.query('SELECT id FROM business_profile WHERE tenant_id = 1 LIMIT 1');
     if (profileCheck.rows.length === 0) {
       await pool.query(
-        `INSERT INTO business_profile (id, general, identidad, contacto, ubicacion, redes, horarios, financiero, adicional, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO NOTHING`,
+        `INSERT INTO business_profile (general, identidad, contacto, ubicacion, redes, horarios, financiero, adicional, tenant_id, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
         [
-          1,
           JSON.stringify(DEFAULT_PROFILE.general),
           JSON.stringify(DEFAULT_PROFILE.identidad),
           JSON.stringify(DEFAULT_PROFILE.contacto),
@@ -354,10 +412,10 @@ const initDatabase = async () => {
           1
         ]
       );
-      console.log('🏢 Perfil de negocio inicial sembrado.');
+      console.log('🏢 Perfil de negocio inicial sembrado para sede #1.');
     }
 
-    console.log('✅ Esquema de base de datos PostgreSQL verificado y listo.');
+    console.log('✅ Esquema multitenant de base de datos PostgreSQL verificado y listo.');
   } catch (err) {
     console.error('⚠️ Error al inicializar base de datos PostgreSQL:', err.message);
   }
@@ -374,6 +432,7 @@ app.get('/', (req, res) => {
   res.json({
     message: '¡API de El Buen Corte activa y conectada a PostgreSQL!',
     status: 'online',
+    multitenant: true,
     timestamp: new Date()
   });
 });
@@ -417,7 +476,7 @@ app.post('/api/upload', authenticateToken, async (req, res) => {
   }
 });
 
-// Login de Usuario con Protección de Fuerza Bruta
+// Login de Usuario con Protección de Fuerza Bruta y Multi-tenancy
 app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -450,8 +509,24 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     // Login exitoso: reiniciar contador de intentos
     resetLoginAttempts(req);
 
+    const userTenantId = user.tenant_id || (user.rol === 'superadmin' ? null : user.id);
+
+    // Asegurar que si el usuario no tenía tenant_id y no es superadmin, se guarde
+    if (!user.tenant_id && user.rol !== 'superadmin') {
+      await pool.query('UPDATE usuarios SET tenant_id = $1 WHERE id = $1', [user.id]);
+      await ensureTenantProfile(user.id, user.nombre);
+    }
+
     const token = jwt.sign(
-      { id: user.id, nombre: user.nombre, email: user.email, username: user.username, rol: user.rol, activo: user.activo },
+      { 
+        id: user.id, 
+        nombre: user.nombre, 
+        email: user.email, 
+        username: user.username, 
+        rol: user.rol, 
+        activo: user.activo,
+        tenant_id: userTenantId 
+      },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -465,7 +540,8 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
         email: user.email,
         username: user.username,
         rol: user.rol,
-        activo: user.activo
+        activo: user.activo,
+        tenant_id: userTenantId
       }
     });
   } catch (err) {
@@ -478,13 +554,24 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 
 const isUserAdminOrSuper = (rol) => rol === 'admin' || rol === 'superadmin';
 
-// Obtener todos los usuarios
+// Obtener usuarios (Aislados por Tenant para Admin, Global para SuperAdmin)
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     if (!isUserAdminOrSuper(req.user.rol)) {
       return res.status(403).json({ error: 'Acceso denegado. Solo administradores y superadmin pueden ver usuarios.' });
     }
-    const { rows } = await pool.query('SELECT id, nombre, email, username, rol, activo, created_at FROM usuarios ORDER BY id ASC');
+    
+    let query = 'SELECT id, nombre, email, username, rol, activo, tenant_id, created_at FROM usuarios';
+    let params = [];
+    
+    if (req.user.rol !== 'superadmin') {
+      const tenantId = req.user.tenant_id || req.user.id;
+      query += ' WHERE tenant_id = $1';
+      params.push(tenantId);
+    }
+    
+    query += ' ORDER BY id ASC';
+    const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     console.error('Error al obtener usuarios:', err);
@@ -499,7 +586,7 @@ app.post('/api/users', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Acceso denegado. Solo administradores y superadmin pueden crear usuarios.' });
     }
 
-    const { nombre, email, username, password, rol = 'admin', activo = true } = req.body;
+    const { nombre, email, username, password, rol = 'admin', activo = true, tenant_id: specifiedTenantId } = req.body;
 
     if (!nombre || !username || !password) {
       return res.status(400).json({ error: 'Todos los campos obligatorios (nombre, Nik, contraseña) son requeridos.' });
@@ -516,22 +603,44 @@ app.post('/api/users', authenticateToken, async (req, res) => {
     
     const existing = await pool.query('SELECT id FROM usuarios WHERE LOWER(username) = LOWER($1)', [username.trim()]);
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Este correo electrónico ya se encuentra registrado.' });
+      return res.status(400).json({ error: 'Este nombre de usuario ya se encuentra registrado.' });
+    }
+
+    let userTenantId = null;
+    if (req.user.rol === 'admin') {
+      userTenantId = req.user.tenant_id || req.user.id;
+    } else if (req.user.rol === 'superadmin') {
+      if (specifiedTenantId) {
+        userTenantId = Number(specifiedTenantId);
+      } else if (rol === 'superadmin') {
+        userTenantId = null;
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO usuarios (nombre, email, username, password, rol, activo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nombre, email, username, rol, activo, created_at`,
-      [nombre.trim(), email ? email.trim().toLowerCase() : null, username.trim().toLowerCase(), hashedPassword, rol, activo !== false]
+      `INSERT INTO usuarios (nombre, email, username, password, rol, activo, tenant_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at`,
+      [nombre.trim(), email ? email.trim().toLowerCase() : null, username.trim().toLowerCase(), hashedPassword, rol, activo !== false, userTenantId]
     );
+
+    const newUser = result.rows[0];
+
+    // Si es un nuevo admin creado por superadmin sin tenant_id previo, su propio id es su tenant_id
+    if (newUser.rol === 'admin' && !newUser.tenant_id) {
+      await pool.query('UPDATE usuarios SET tenant_id = $1 WHERE id = $1', [newUser.id]);
+      newUser.tenant_id = newUser.id;
+      await ensureTenantProfile(newUser.id, newUser.nombre);
+    }
 
     res.status(201).json({
       message: 'Usuario creado exitosamente.',
-      user: result.rows[0]
+      user: newUser
     });
   } catch (err) {
     console.error('Error en creación de usuario:', err);
-    res.status(500).json({ error: 'Error interno al registrar usuario: ' + err.message + ' ' + err.stack });
+    res.status(500).json({ error: 'Error interno al registrar usuario: ' + err.message });
   }
 });
 
@@ -543,7 +652,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { nombre, email, username, password, rol, activo } = req.body;
+    const { nombre, email, username, password, rol, activo, tenant_id } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es requerido.' });
@@ -555,14 +664,20 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
 
-    // Si el usuario actual no es superadmin, no puede editar a un superadmin ni asignarse/asignar superadmin
+    const currentTarget = targetUser.rows[0];
+
+    // Si el usuario actual no es superadmin, verificar que pertenezca a su mismo tenant
     if (req.user.rol !== 'superadmin') {
-      if (targetUser.rows[0].rol === 'superadmin' || rol === 'superadmin') {
+      const myTenantId = req.user.tenant_id || req.user.id;
+      if (currentTarget.tenant_id !== myTenantId) {
+        return res.status(403).json({ error: 'Acceso denegado. No puedes modificar usuarios de otra tienda.' });
+      }
+      if (currentTarget.rol === 'superadmin' || rol === 'superadmin') {
         return res.status(403).json({ error: 'Solo un Super Administrador puede modificar o asignar cuentas de SuperAdmin.' });
       }
     }
 
-    // Verificar colisión de username con otros usuarios si se provee
+    // Verificar colisión de username con otros usuarios
     if (username && username.trim()) {
       const usernameCheck = await pool.query('SELECT id FROM usuarios WHERE LOWER(username) = LOWER($1) AND id != $2', [username.trim().toLowerCase(), id]);
       if (usernameCheck.rows.length > 0) {
@@ -570,7 +685,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Verificar colisión de email con otros usuarios si se provee
+    // Verificar colisión de email con otros usuarios
     if (email && email.trim()) {
       const emailCheck = await pool.query('SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND id != $2', [email.trim().toLowerCase(), id]);
       if (emailCheck.rows.length > 0) {
@@ -578,21 +693,22 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const newActivo = activo !== undefined ? activo : targetUser.rows[0].activo;
-    const finalUsername = username ? username.trim().toLowerCase() : targetUser.rows[0].username;
-    const finalEmail = email ? email.trim().toLowerCase() : targetUser.rows[0].email;
-    const finalRol = rol || targetUser.rows[0].rol;
+    const newActivo = activo !== undefined ? activo : currentTarget.activo;
+    const finalUsername = username ? username.trim().toLowerCase() : currentTarget.username;
+    const finalEmail = email ? email.trim().toLowerCase() : currentTarget.email;
+    const finalRol = rol || currentTarget.rol;
+    const finalTenantId = req.user.rol === 'superadmin' && tenant_id !== undefined ? tenant_id : currentTarget.tenant_id;
 
     let queryText = '';
     let queryParams = [];
 
     if (password && password.trim().length >= 6) {
       const hashedPassword = await bcrypt.hash(password.trim(), 10);
-      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, password = $6 WHERE id = $7 RETURNING id, nombre, email, username, rol, activo, created_at`;
-      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, hashedPassword, id];
+      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, password = $7 WHERE id = $8 RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at`;
+      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, hashedPassword, id];
     } else {
-      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5 WHERE id = $6 RETURNING id, nombre, email, username, rol, activo, created_at`;
-      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, id];
+      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6 WHERE id = $7 RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at`;
+      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, id];
     }
 
     const result = await pool.query(queryText, queryParams);
@@ -606,25 +722,33 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Bloquear / Activar usuario en 1 clic (Solo SuperAdmin)
+// Bloquear / Activar usuario en 1 clic
 app.patch('/api/users/:id/toggle-status', authenticateToken, async (req, res) => {
   try {
-    if (req.user.rol !== 'superadmin') {
-      return res.status(403).json({ error: 'Solo el Super Administrador puede bloquear o activar usuarios.' });
+    if (!isUserAdminOrSuper(req.user.rol)) {
+      return res.status(403).json({ error: 'Acceso denegado.' });
     }
 
     const { id } = req.params;
 
     if (parseInt(id) === req.user.id) {
-      return res.status(400).json({ error: 'No puedes bloquear tu propia cuenta activa de SuperAdmin.' });
+      return res.status(400).json({ error: 'No puedes bloquear tu propia cuenta activa de sesión.' });
     }
 
-    const userCheck = await pool.query('SELECT id, rol, activo, nombre FROM usuarios WHERE id = $1', [id]);
+    const userCheck = await pool.query('SELECT id, rol, activo, nombre, tenant_id FROM usuarios WHERE id = $1', [id]);
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
 
     const current = userCheck.rows[0];
+
+    // Restricción multitenant para admin
+    if (req.user.rol !== 'superadmin') {
+      const myTenantId = req.user.tenant_id || req.user.id;
+      if (current.tenant_id !== myTenantId) {
+        return res.status(403).json({ error: 'No puedes modificar usuarios de otra tienda.' });
+      }
+    }
 
     // Evitar bloquear al último superadmin activo
     if (current.rol === 'superadmin' && current.activo) {
@@ -636,7 +760,7 @@ app.patch('/api/users/:id/toggle-status', authenticateToken, async (req, res) =>
 
     const newStatus = !current.activo;
     const result = await pool.query(
-      'UPDATE usuarios SET activo = $1 WHERE id = $2 RETURNING id, nombre, email, username, rol, activo, created_at',
+      'UPDATE usuarios SET activo = $1 WHERE id = $2 RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at',
       [newStatus, id]
     );
 
@@ -650,11 +774,11 @@ app.patch('/api/users/:id/toggle-status', authenticateToken, async (req, res) =>
   }
 });
 
-// Restablecer / Recuperar contraseña de un usuario (Solo SuperAdmin)
+// Restablecer / Recuperar contraseña de un usuario
 app.post('/api/users/:id/reset-password', authenticateToken, async (req, res) => {
   try {
-    if (req.user.rol !== 'superadmin') {
-      return res.status(403).json({ error: 'Solo el Super Administrador puede restablecer contraseñas de usuarios.' });
+    if (!isUserAdminOrSuper(req.user.rol)) {
+      return res.status(403).json({ error: 'Acceso denegado.' });
     }
 
     const { id } = req.params;
@@ -664,9 +788,17 @@ app.post('/api/users/:id/reset-password', authenticateToken, async (req, res) =>
       return res.status(400).json({ error: 'La nueva contraseña debe tener un mínimo de 6 caracteres.' });
     }
 
-    const userCheck = await pool.query('SELECT id, nombre, email, rol FROM usuarios WHERE id = $1', [id]);
+    const userCheck = await pool.query('SELECT id, nombre, email, rol, tenant_id FROM usuarios WHERE id = $1', [id]);
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    // Restricción multitenant para admin
+    if (req.user.rol !== 'superadmin') {
+      const myTenantId = req.user.tenant_id || req.user.id;
+      if (userCheck.rows[0].tenant_id !== myTenantId) {
+        return res.status(403).json({ error: 'No puedes restablecer contraseñas de usuarios de otra tienda.' });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -691,14 +823,21 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 
     const { id } = req.params;
     
-    // Evitar que un usuario se elimine a sí mismo
     if (parseInt(id) === req.user.id) {
        return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta activa de sesión.' });
     }
 
-    const userCheck = await pool.query('SELECT rol FROM usuarios WHERE id = $1', [id]);
+    const userCheck = await pool.query('SELECT rol, tenant_id FROM usuarios WHERE id = $1', [id]);
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: 'El usuario no existe o ya fue eliminado.' });
+    }
+
+    // Restricción multitenant para admin
+    if (req.user.rol !== 'superadmin') {
+      const myTenantId = req.user.tenant_id || req.user.id;
+      if (userCheck.rows[0].tenant_id !== myTenantId) {
+        return res.status(403).json({ error: 'No puedes eliminar usuarios de otra tienda.' });
+      }
     }
 
     // Proteger contra eliminación del último superadmin
@@ -709,14 +848,6 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
       }
       if (req.user.rol !== 'superadmin') {
         return res.status(403).json({ error: 'Solo un Super Administrador puede eliminar a otro Super Administrador.' });
-      }
-    }
-
-    // Evitar eliminar al último admin
-    if (userCheck.rows[0].rol === 'admin') {
-      const adminCount = await pool.query("SELECT COUNT(*) FROM usuarios WHERE rol = 'admin'");
-      if (parseInt(adminCount.rows[0].count) <= 1) {
-        return res.status(400).json({ error: 'No puedes eliminar al único administrador de tienda del sistema.' });
       }
     }
 
@@ -731,23 +862,43 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // Verificar token de sesión activa
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, nombre, email, username, rol, activo, created_at FROM usuarios WHERE id = $1', [req.user.id]);
+    const { rows } = await pool.query('SELECT id, nombre, email, username, rol, activo, tenant_id, created_at FROM usuarios WHERE id = $1', [req.user.id]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
-    res.json({ user: rows[0] });
+    const u = rows[0];
+    const userTenantId = u.tenant_id || (u.rol === 'superadmin' ? null : u.id);
+    res.json({ 
+      user: {
+        ...u,
+        tenant_id: userTenantId
+      }
+    });
   } catch (err) {
     console.error('Error en /api/auth/me:', err);
     res.status(500).json({ error: 'Error al verificar token de sesión.' });
   }
 });
 
-// --- Business Profile ---
+// --- Business Profile (Aislado por Tenant) ---
 app.get('/api/business-profile', authenticateToken, async (req, res) => {
   try {
-    let result = await pool.query('SELECT * FROM business_profile ORDER BY updated_at DESC, id DESC LIMIT 1');
+    const tenantId = getReqTenantId(req);
+    let result = await pool.query(
+      'SELECT * FROM business_profile WHERE tenant_id = $1 ORDER BY updated_at DESC, id DESC LIMIT 1', 
+      [tenantId]
+    );
+
     if (result.rowCount === 0 || !result.rows[0].general || Object.keys(result.rows[0].general).length === 0) {
-      return res.json(DEFAULT_PROFILE);
+      // Devolver perfil por defecto ajustado al tenant
+      return res.json({
+        ...DEFAULT_PROFILE,
+        general: {
+          ...DEFAULT_PROFILE.general,
+          nombre: req.user?.nombre ? `Carnicería ${req.user.nombre}` : `El Buen Corte #${tenantId}`
+        },
+        tenant_id: tenantId
+      });
     }
     res.json(result.rows[0]);
   } catch (err) {
@@ -758,15 +909,20 @@ app.get('/api/business-profile', authenticateToken, async (req, res) => {
 
 app.post('/api/business-profile', authenticateToken, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { general, identidad, contacto, ubicacion, redes, horarios, financiero, adicional } = req.body;
     
-    const existing = await pool.query('SELECT id FROM business_profile ORDER BY updated_at DESC, id DESC LIMIT 1');
+    const existing = await pool.query(
+      'SELECT id FROM business_profile WHERE tenant_id = $1 ORDER BY updated_at DESC, id DESC LIMIT 1',
+      [tenantId]
+    );
+
     let result;
     if (existing.rows.length > 0) {
       result = await pool.query(
         `UPDATE business_profile
          SET general = $1, identidad = $2, contacto = $3, ubicacion = $4, redes = $5, horarios = $6, financiero = $7, adicional = $8, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $9
+         WHERE id = $9 AND tenant_id = $10
          RETURNING *`,
         [
           JSON.stringify(general || {}),
@@ -777,7 +933,8 @@ app.post('/api/business-profile', authenticateToken, async (req, res) => {
           JSON.stringify(horarios || {}),
           JSON.stringify(financiero || {}),
           JSON.stringify(adicional || {}),
-          existing.rows[0].id
+          existing.rows[0].id,
+          tenantId
         ]
       );
     } else {
@@ -794,7 +951,7 @@ app.post('/api/business-profile', authenticateToken, async (req, res) => {
           JSON.stringify(horarios || {}),
           JSON.stringify(financiero || {}),
           JSON.stringify(adicional || {}),
-          req.user.id
+          tenantId
         ]
       );
     }
@@ -806,19 +963,27 @@ app.post('/api/business-profile', authenticateToken, async (req, res) => {
 });
 
 // ============================================================================
-// 🛒 RUTAS PÚBLICAS DE TIENDA VIRTUAL (Sin autenticación requerida)
+// 🛒 RUTAS PÚBLICAS DE TIENDA VIRTUAL (Aisladas por Tenant)
 // ============================================================================
 
 // Obtener catálogo público de productos
 app.get('/api/public/productos', async (req, res) => {
   try {
-    const { tenantId } = req.query;
+    const { tenantId, tenant } = req.query;
+    const targetTenant = tenantId || tenant;
+
     let query = 'SELECT * FROM inventario';
     let params = [];
 
-    if (tenantId) {
+    if (targetTenant) {
       query += ' WHERE tenant_id = $1';
-      params.push(tenantId);
+      params.push(targetTenant);
+    } else {
+      // Si no se especifica tenant, usar el primer tenant disponible en la base de datos
+      const firstTenantCheck = await pool.query("SELECT tenant_id FROM inventario WHERE tenant_id IS NOT NULL ORDER BY tenant_id ASC LIMIT 1");
+      const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;
+      query += ' WHERE tenant_id = $1';
+      params.push(defaultTenant);
     }
     query += ' ORDER BY created_at DESC';
 
@@ -846,56 +1011,30 @@ app.get('/api/public/productos', async (req, res) => {
 // Obtener perfil público del negocio
 app.get('/api/public/perfil', async (req, res) => {
   try {
-    const { tenantId } = req.query;
+    const { tenantId, tenant } = req.query;
+    const targetTenant = tenantId || tenant;
+
     let query = 'SELECT * FROM business_profile';
     let params = [];
 
-    if (tenantId) {
+    if (targetTenant) {
       query += ' WHERE tenant_id = $1';
-      params.push(tenantId);
+      params.push(targetTenant);
+    } else {
+      const firstTenantCheck = await pool.query("SELECT tenant_id FROM business_profile WHERE tenant_id IS NOT NULL ORDER BY tenant_id ASC LIMIT 1");
+      const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;
+      query += ' WHERE tenant_id = $1';
+      params.push(defaultTenant);
     }
     query += ' ORDER BY updated_at DESC, id DESC LIMIT 1';
 
     const result = await pool.query(query, params);
     if (result.rows.length === 0 || !result.rows[0].general || Object.keys(result.rows[0].general).length === 0) {
       return res.json({
+        ...DEFAULT_PROFILE,
         general: {
-          nombre: 'El Buen Corte',
-          tipoNegocio: 'Carnicería Gourmet',
-          descripcion: 'Carnicería premium especializada en cortes finos de res, cerdo y pollo de primera calidad.',
-          eslogan: 'Cortes Selectos de Calidad Garantizada'
-        },
-        identidad: {
-          logo: '',
-          portada: ''
-        },
-        contacto: {
-          telefonoPrincipal: '+57 322 206 7870',
-          whatsapp: '+57 322 206 7870',
-          email: 'contacto@elbuencorte.com'
-        },
-        ubicacion: {
-          ciudad: 'Bogotá',
-          direccion: 'Calle 80 # 15-20',
-          departamento: 'Cundinamarca',
-          pais: 'Colombia'
-        },
-        redes: [
-          { id: '1', plataforma: 'Facebook', usuario: 'El Buen Corte', url: 'https://facebook.com/elbuencorte' },
-          { id: '2', plataforma: 'Instagram', usuario: '@elbuencorte', url: 'https://instagram.com/elbuencorte' }
-        ],
-        horarios: {
-          'Lunes': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Martes': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Miércoles': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Jueves': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Viernes': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Sábado': { abierto: true, apertura: '07:00', cierre: '19:00' },
-          'Domingo': { abierto: true, apertura: '08:00', cierre: '15:00' }
-        },
-        adicional: {
-          mision: 'Proveer los mejores cortes de carne con altos estándares de higiene y servicio excepcional.',
-          servicios: ['Venta de carnes frescas', 'Cortes personalizados', 'Servicio a domicilio', 'Empaque al vacío']
+          ...DEFAULT_PROFILE.general,
+          nombre: 'El Buen Corte Gourmet'
         }
       });
     }
@@ -906,28 +1045,28 @@ app.get('/api/public/perfil', async (req, res) => {
   }
 });
 
-// Crear pedido público desde la tienda virtual
+// Crear pedido público desde la tienda virtual (Confinado a Tenant)
 app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
   try {
-    const { cliente, telefono, direccion, metodoPago, notas, items, tenantId } = req.body;
+    const { cliente, telefono, direccion, metodoPago, notas, items, tenantId, tenant } = req.body;
     
     if (!cliente || !items || items.length === 0) {
       return res.status(400).json({ error: 'Faltan datos obligatorios para el pedido.' });
     }
 
-    // Determinar tenant (usar tenant provisto o primer admin en BD)
-    let targetTenantId = tenantId;
+    // Determinar tenant destino
+    let targetTenantId = tenantId || tenant;
     if (!targetTenantId) {
       const firstProd = await pool.query('SELECT tenant_id FROM inventario WHERE id = $1', [items[0].productoId]);
       if (firstProd.rows.length > 0 && firstProd.rows[0].tenant_id) {
         targetTenantId = firstProd.rows[0].tenant_id;
       } else {
-        const anyAdmin = await pool.query("SELECT id FROM usuarios WHERE rol IN ('admin', 'superadmin') ORDER BY id ASC LIMIT 1");
-        targetTenantId = anyAdmin.rows[0]?.id || 10;
+        const anyAdmin = await pool.query("SELECT tenant_id FROM usuarios WHERE rol IN ('admin', 'superadmin') AND tenant_id IS NOT NULL ORDER BY id ASC LIMIT 1");
+        targetTenantId = anyAdmin.rows[0]?.tenant_id || 1;
       }
     }
 
-    const countResult = await pool.query('SELECT count(*) FROM pedidos');
+    const countResult = await pool.query('SELECT count(*) FROM pedidos WHERE tenant_id = $1', [targetTenantId]);
     const orderId = `PED-${100 + Number(countResult.rows[0].count) + 1}`;
     const dateStr = new Date().toLocaleDateString('es-CO');
 
@@ -935,9 +1074,12 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
     let total = 0;
 
     for (const oi of items) {
-      const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [oi.productoId]);
+      const findResult = await pool.query(
+        'SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', 
+        [oi.productoId, targetTenantId]
+      );
       if (findResult.rows.length === 0) {
-        return res.status(404).json({ error: `El producto con ID ${oi.productoId} no existe.` });
+        return res.status(404).json({ error: `El producto con ID ${oi.productoId} no existe en esta tienda.` });
       }
       
       const prod = findResult.rows[0];
@@ -958,9 +1100,12 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
       // Calcular precio unitario según la unidad vendida (con descuento si aplica)
       const unitPrice = calculateUnitPriceForSoldUnit(prod, soldUnit);
 
-      // Descontar del inventario de forma atómica y precisa
+      // Descontar del inventario de forma atómica y precisa dentro del tenant
       const nuevoStock = Math.max(0, currentStock - stockDeduction);
-      await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, oi.productoId]);
+      await pool.query(
+        'UPDATE inventario SET stock = $1 WHERE id = $2 AND tenant_id = $3', 
+        [nuevoStock, oi.productoId, targetTenantId]
+      );
 
       orderItems.push({
         productoId: oi.productoId,
@@ -974,7 +1119,7 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
 
     const clienteDisplay = telefono ? `${cliente} (Tel: ${telefono})` : cliente;
 
-    // 1. Insertar el pedido principal con estado Pendiente
+    // 1. Insertar el pedido principal con estado Pendiente y tenant_id
     await pool.query(
       `INSERT INTO pedidos (id, cliente, total, estado, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -990,18 +1135,19 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
       );
     }
 
-    // 3. Crear automáticamente notificación para la campana del Dashboard
+    // 3. Crear automáticamente notificación para la campana del Dashboard del tenant
     const notifMsg = `Has recibido un nuevo pedido (#${orderId}) de ${cliente} por ${formatCOP(total)}. Revisa los pedidos pendientes para gestionarlo.`;
     await pool.query(
-      `INSERT INTO notificaciones (tipo, titulo, mensaje, leida, referencia_id, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO notificaciones (tipo, titulo, mensaje, leida, referencia_id, metadata, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         'pedido_nuevo',
         'Nuevo pedido recibido',
         notifMsg,
         false,
         orderId,
-        JSON.stringify({ orderId, cliente, total, fecha: dateStr, telefono, direccion, items: orderItems })
+        JSON.stringify({ orderId, cliente, total, fecha: dateStr, telefono, direccion, items: orderItems }),
+        targetTenantId
       ]
     );
 
@@ -1015,7 +1161,8 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
       items: orderItems,
       total,
       estado: 'Pendiente',
-      fecha: dateStr
+      fecha: dateStr,
+      tenantId: targetTenantId
     });
   } catch (err) {
     console.error('Error al crear pedido público:', err);
@@ -1024,13 +1171,17 @@ app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
 });
 
 // ============================================================================
-// 🔔 SISTEMA DE NOTIFICACIONES
+// 🔔 SISTEMA DE NOTIFICACIONES (Aisladas por Tenant)
 // ============================================================================
 
 // Obtener lista de notificaciones recientes
 app.get('/api/notificaciones', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM notificaciones ORDER BY created_at DESC LIMIT 50');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query(
+      'SELECT * FROM notificaciones WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [tenantId]
+    );
     const notifs = result.rows.map(r => ({
       id: r.id,
       tipo: r.tipo,
@@ -1039,6 +1190,7 @@ app.get('/api/notificaciones', authenticateToken, async (req, res) => {
       leida: r.leida,
       referenciaId: r.referencia_id,
       metadata: r.metadata,
+      tenantId: r.tenant_id,
       createdAt: r.created_at
     }));
     res.json(notifs);
@@ -1052,7 +1204,8 @@ app.get('/api/notificaciones', authenticateToken, async (req, res) => {
 app.patch('/api/notificaciones/:id/read', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('UPDATE notificaciones SET leida = true WHERE id = $1', [id]);
+    const tenantId = getReqTenantId(req);
+    await pool.query('UPDATE notificaciones SET leida = true WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     res.json({ success: true, id });
   } catch (err) {
     console.error('Error al marcar notificación como leída:', err);
@@ -1063,7 +1216,8 @@ app.patch('/api/notificaciones/:id/read', authenticateToken, async (req, res) =>
 // Marcar todas las notificaciones como leídas
 app.patch('/api/notificaciones/mark-all-read', authenticateToken, async (req, res) => {
   try {
-    await pool.query('UPDATE notificaciones SET leida = true WHERE leida = false');
+    const tenantId = getReqTenantId(req);
+    await pool.query('UPDATE notificaciones SET leida = true WHERE leida = false AND tenant_id = $1', [tenantId]);
     res.json({ success: true, message: 'Todas las notificaciones fueron marcadas como leídas' });
   } catch (err) {
     console.error('Error al marcar todas las notificaciones:', err);
@@ -1075,7 +1229,8 @@ app.patch('/api/notificaciones/mark-all-read', authenticateToken, async (req, re
 app.delete('/api/notificaciones/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM notificaciones WHERE id = $1', [id]);
+    const tenantId = getReqTenantId(req);
+    await pool.query('DELETE FROM notificaciones WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     res.json({ success: true, id });
   } catch (err) {
     console.error('Error al eliminar notificación:', err);
@@ -1084,12 +1239,13 @@ app.delete('/api/notificaciones/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================================================
-// 📦 GESTIÓN DE INVENTARIO Y MERMAS
+// 📦 GESTIÓN DE INVENTARIO Y MERMAS (Aisladas por Tenant)
 // ============================================================================
 
 app.get('/api/inventario', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM inventario ORDER BY created_at DESC');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query('SELECT * FROM inventario WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
     const items = result.rows.map(r => ({
       id: r.id,
       nombre: r.nombre,
@@ -1110,9 +1266,10 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
   }
 });
 
-// Crear producto en el inventario
+// Crear producto en el inventario del tenant
 app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto, descuento, unidadMedida, unidad_medida } = req.body;
     
     if (!nombre || !precioVenta || !categoria) {
@@ -1136,7 +1293,7 @@ app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req
 
     const finalUnit = normalizeUnit(unidadMedida || unidad_medida, categoria, nombre);
 
-    // Obtener ID numérico máximo
+    // Obtener ID numérico máximo global para evitar colisión de claves primarias
     const maxResult = await pool.query('SELECT id FROM inventario');
     const ids = maxResult.rows.map(r => Number(r.id)).filter(n => !isNaN(n));
     const nuevoId = String(ids.length > 0 ? Math.max(...ids) + 1 : 1);
@@ -1156,7 +1313,7 @@ app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req
         Number(limiteMin) || 0,
         Math.max(0, Math.min(100, Number(descuento) || 0)),
         finalUnit,
-        req.user.id
+        tenantId
       ]
     );
 
@@ -1171,7 +1328,8 @@ app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req
       descuento: Number(r.descuento || 0),
       unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
-      limiteMin: Number(r.limite_min)
+      limiteMin: Number(r.limite_min),
+      tenantId: r.tenant_id
     });
   } catch (err) {
     console.error('Error al crear producto:', err);
@@ -1183,17 +1341,18 @@ app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req
 app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+    const tenantId = getReqTenantId(req);
     const { descuento } = req.body;
     const numDescuento = Math.max(0, Math.min(100, Number(descuento) || 0));
 
-    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [id]);
+    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     if (findResult.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
     const updateResult = await pool.query(
-      'UPDATE inventario SET descuento = $1 WHERE id = $2 RETURNING *',
-      [numDescuento, id]
+      'UPDATE inventario SET descuento = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *',
+      [numDescuento, id, tenantId]
     );
 
     const r = updateResult.rows[0];
@@ -1207,7 +1366,8 @@ app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) =
       descuento: Number(r.descuento || 0),
       unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
-      limiteMin: Number(r.limite_min)
+      limiteMin: Number(r.limite_min),
+      tenantId: r.tenant_id
     });
   } catch (err) {
     console.error('Error al actualizar descuento:', err);
@@ -1219,11 +1379,12 @@ app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) =
 app.delete('/api/inventario/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [id]);
+    const tenantId = getReqTenantId(req);
+    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     if (findResult.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-    await pool.query('DELETE FROM inventario WHERE id = $1', [id]);
+    await pool.query('DELETE FROM inventario WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     res.json({ success: true, eliminado: findResult.rows[0] });
   } catch (err) {
     console.error('Error al eliminar producto:', err);
@@ -1234,6 +1395,7 @@ app.delete('/api/inventario/:id', authenticateToken, async (req, res) => {
 // Abastecer stock de un producto (con costo real pagado al proveedor)
 app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { productoId, cantidad, unidad, costoTotal, metodoPago } = req.body;
     const rawQty = Number(cantidad);
 
@@ -1241,10 +1403,10 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
       return res.status(400).json({ error: 'La cantidad a abastecer debe ser un número positivo mayor a 0.' });
     }
 
-    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [productoId]);
+    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', [productoId, tenantId]);
     
     if (findResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
+      return res.status(404).json({ error: 'Producto no encontrado en su inventario.' });
     }
 
     const prod = findResult.rows[0];
@@ -1255,16 +1417,16 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
     const qtyInBaseUnit = convertQuantity(rawQty, inputUnit, baseUnit);
     const nuevoStock = Number(prod.stock) + qtyInBaseUnit;
     
-    await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, productoId]);
+    await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2 AND tenant_id = $3', [nuevoStock, productoId, tenantId]);
 
-    // Costo real pagado al proveedor (desvinculado por completo del precio de venta al cliente)
+    // Costo real pagado al proveedor
     const parsedCost = Number(costoTotal);
     const montoEgreso = (!isNaN(parsedCost) && parsedCost >= 0) ? parsedCost : 0;
     
     let trxResponse = null;
 
     if (montoEgreso > 0) {
-      const countTrx = await pool.query('SELECT count(*) FROM transacciones');
+      const countTrx = await pool.query('SELECT count(*) FROM transacciones WHERE tenant_id = $1', [tenantId]);
       const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
       const nowStr = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
@@ -1279,7 +1441,7 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
           montoEgreso, 
           metodoPago || 'Efectivo', 
           nowStr, 
-          req.user.id
+          tenantId
         ]
       );
 
@@ -1304,7 +1466,8 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
         descuento: Number(prod.descuento || 0),
         unidadMedida: baseUnit,
         stock: nuevoStock,
-        limiteMin: Number(prod.limite_min)
+        limiteMin: Number(prod.limite_min),
+        tenantId: prod.tenant_id
       },
       transaccion: trxResponse
     });
@@ -1317,6 +1480,7 @@ app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, 
 // Registrar merma de un producto
 app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { productoId, peso, motivo } = req.body;
     const pesoMerma = Number(peso);
 
@@ -1324,7 +1488,7 @@ app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, asy
       return res.status(400).json({ error: 'La cantidad o peso de merma debe ser un número positivo mayor a 0.' });
     }
 
-    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [productoId]);
+    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', [productoId, tenantId]);
 
     if (findResult.rows.length === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
@@ -1333,9 +1497,9 @@ app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, asy
     const prod = findResult.rows[0];
     const nuevoStock = Math.max(0, Number(prod.stock) - pesoMerma);
     
-    await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, productoId]);
+    await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2 AND tenant_id = $3', [nuevoStock, productoId, tenantId]);
 
-    const countMermas = await pool.query('SELECT count(*) FROM mermas');
+    const countMermas = await pool.query('SELECT count(*) FROM mermas WHERE tenant_id = $1', [tenantId]);
     const mermaId = `M-${Number(countMermas.rows[0].count) + 1}`;
     const dateStr = new Date().toLocaleDateString('es-CO');
 
@@ -1343,7 +1507,7 @@ app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, asy
       `INSERT INTO mermas (id, producto_nombre, peso, motivo, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [mermaId, prod.nombre, pesoMerma, motivo || 'Descarte estándar', dateStr, req.user.id]
+      [mermaId, prod.nombre, pesoMerma, motivo || 'Descarte estándar', dateStr, tenantId]
     );
 
     const m = insertMerma.rows[0];
@@ -1356,7 +1520,8 @@ app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, asy
         foto: prod.foto,
         precioVenta: Number(prod.precio_venta),
         stock: nuevoStock,
-        limiteMin: Number(prod.limite_min)
+        limiteMin: Number(prod.limite_min),
+        tenantId: prod.tenant_id
       },
       merma: {
         id: m.id,
@@ -1375,7 +1540,8 @@ app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, asy
 // Obtener historial de mermas
 app.get('/api/mermas', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM mermas ORDER BY created_at DESC');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query('SELECT * FROM mermas WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
     res.json(result.rows.map(m => ({
       id: m.id,
       productoNombre: m.producto_nombre,
@@ -1390,12 +1556,13 @@ app.get('/api/mermas', authenticateToken, async (req, res) => {
 });
 
 // ============================================================================
-// 📋 GESTIÓN DE PEDIDOS
+// 📋 GESTIÓN DE PEDIDOS (Aislada por Tenant)
 // ============================================================================
 
 app.get('/api/pedidos', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM pedidos ORDER BY created_at DESC');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query('SELECT * FROM pedidos WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
     const orders = [];
     
     for (const r of result.rows) {
@@ -1407,6 +1574,7 @@ app.get('/api/pedidos', authenticateToken, async (req, res) => {
         estado: r.estado,
         metodoPago: r.metodo_pago || 'Efectivo',
         fecha: r.fecha,
+        tenantId: r.tenant_id,
         items: itemsResult.rows.map(item => ({
           productoId: item.producto_id,
           nombre: item.nombre,
@@ -1426,13 +1594,14 @@ app.get('/api/pedidos', authenticateToken, async (req, res) => {
 // Crear pedido desde el panel de administración
 app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { cliente, items, metodoPago } = req.body;
     
     if (!cliente || !items || items.length === 0) {
       return res.status(400).json({ error: 'Datos de pedido incompletos' });
     }
 
-    const countResult = await pool.query('SELECT count(*) FROM pedidos');
+    const countResult = await pool.query('SELECT count(*) FROM pedidos WHERE tenant_id = $1', [tenantId]);
     const orderId = `PED-${100 + Number(countResult.rows[0].count) + 1}`;
     const dateStr = new Date().toLocaleDateString('es-CO');
 
@@ -1440,9 +1609,9 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
     let total = 0;
 
     for (const oi of items) {
-      const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [oi.productoId]);
+      const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1 AND tenant_id = $2', [oi.productoId, tenantId]);
       if (findResult.rows.length === 0) {
-        return res.status(404).json({ error: `Producto ${oi.productoId} no existe` });
+        return res.status(404).json({ error: `Producto ${oi.productoId} no existe en su inventario.` });
       }
       
       const prod = findResult.rows[0];
@@ -1454,7 +1623,7 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
       // Descontar del inventario considerando conversiones de unidad
       const stockDeduction = calculateStockDeduction(cantidadVal, itemUnit, baseUnit);
       const nuevoStock = Math.max(0, Number(prod.stock) - stockDeduction);
-      await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, oi.productoId]);
+      await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2 AND tenant_id = $3', [nuevoStock, oi.productoId, tenantId]);
 
       orderItems.push({
         productoId: oi.productoId,
@@ -1470,7 +1639,7 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
     await pool.query(
       `INSERT INTO pedidos (id, cliente, total, estado, metodo_pago, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [orderId, cliente, total, 'Pendiente', metodoPago || 'Efectivo', dateStr, req.user.id]
+      [orderId, cliente, total, 'Pendiente', metodoPago || 'Efectivo', dateStr, tenantId]
     );
 
     // Insertar cada ítem del pedido
@@ -1485,15 +1654,16 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
     // Insertar notificación
     const notifMsg = `Nuevo pedido (#${orderId}) registrado internamente para ${cliente} por ${formatCOP(total)}.`;
     await pool.query(
-      `INSERT INTO notificaciones (tipo, titulo, mensaje, leida, referencia_id, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO notificaciones (tipo, titulo, mensaje, leida, referencia_id, metadata, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         'pedido_nuevo',
         'Nuevo pedido registrado',
         notifMsg,
         false,
         orderId,
-        JSON.stringify({ orderId, cliente, total, fecha: dateStr, items: orderItems })
+        JSON.stringify({ orderId, cliente, total, fecha: dateStr, items: orderItems }),
+        tenantId
       ]
     );
 
@@ -1504,7 +1674,8 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
       total,
       estado: 'Pendiente',
       metodoPago: metodoPago || 'Efectivo',
-      fecha: dateStr
+      fecha: dateStr,
+      tenantId
     });
   } catch (err) {
     console.error('Error al crear pedido:', err);
@@ -1516,9 +1687,10 @@ app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, r
 app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const tenantId = getReqTenantId(req);
     const { estado, metodoPago } = req.body; // 'Entregado' o 'Cancelado'
     
-    const findResult = await pool.query('SELECT * FROM pedidos WHERE id = $1', [id]);
+    const findResult = await pool.query('SELECT * FROM pedidos WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     if (findResult.rows.length === 0) {
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
@@ -1546,6 +1718,7 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
             estado: p.estado,
             metodoPago: p.metodo_pago,
             fecha: p.fecha,
+            tenantId: p.tenant_id,
             items: orderItems
           },
           message: 'El pedido ya fue procesado previamente con este estado'
@@ -1554,7 +1727,7 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
       return res.status(400).json({ error: `El pedido ya no está pendiente (estado actual: ${p.estado})` });
     }
 
-    await pool.query('UPDATE pedidos SET estado = $1, metodo_pago = $2 WHERE id = $3', [estado, finalPaymentMethod, id]);
+    await pool.query('UPDATE pedidos SET estado = $1, metodo_pago = $2 WHERE id = $3 AND tenant_id = $4', [estado, finalPaymentMethod, id, tenantId]);
 
     const fullPedido = {
       id: p.id,
@@ -1563,12 +1736,13 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
       estado: estado,
       metodoPago: finalPaymentMethod,
       fecha: p.fecha,
+      tenantId: p.tenant_id,
       items: orderItems
     };
 
     if (estado === 'Entregado') {
       // Registrar ingreso en contabilidad
-      const countTrx = await pool.query('SELECT count(*) FROM transacciones');
+      const countTrx = await pool.query('SELECT count(*) FROM transacciones WHERE tenant_id = $1', [tenantId]);
       const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
       const nowStr = new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'});
 
@@ -1576,7 +1750,7 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
         `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [trxId, 'Ingreso', `Venta de ${p.cliente} (${p.id})`, Number(p.total), finalPaymentMethod, nowStr, req.user.id]
+        [trxId, 'Ingreso', `Venta de ${p.cliente} (${p.id})`, Number(p.total), finalPaymentMethod, nowStr, tenantId]
       );
       
       return res.json({ 
@@ -1593,14 +1767,14 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
     } 
     
     if (estado === 'Cancelado') {
-      // Devolver stock al inventario considerando unidades
+      // Devolver stock al inventario del tenant
       for (const item of orderItems) {
-        const prodResult = await pool.query('SELECT stock, unidad_medida FROM inventario WHERE id = $1', [item.productoId]);
+        const prodResult = await pool.query('SELECT stock, unidad_medida FROM inventario WHERE id = $1 AND tenant_id = $2', [item.productoId, tenantId]);
         if (prodResult.rows.length > 0) {
           const prod = prodResult.rows[0];
           const stockToAdd = calculateStockDeduction(item.cantidad, item.unidad, prod.unidad_medida || 'kg');
           const nuevoStock = Number(prod.stock) + stockToAdd;
-          await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, item.productoId]);
+          await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2 AND tenant_id = $3', [nuevoStock, item.productoId, tenantId]);
         }
       }
       return res.json({ pedido: fullPedido });
@@ -1614,12 +1788,13 @@ app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, a
 });
 
 // ============================================================================
-// 🥩 CALCULADORA RES (SIMULACIONES)
+// 🥩 CALCULADORA RES (SIMULACIONES) (Aisladas por Tenant)
 // ============================================================================
 
 app.get('/api/simulaciones', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM simulaciones ORDER BY created_at DESC');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query('SELECT * FROM simulaciones WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
     res.json(result.rows.map(s => ({
       id: s.id,
       fecha: s.fecha,
@@ -1636,6 +1811,7 @@ app.get('/api/simulaciones', authenticateToken, async (req, res) => {
 
 app.post('/api/simulaciones', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { pesoPie, costoTotal, carneKg, realCostoKg } = req.body;
     const dateStr = new Date().toLocaleDateString('es-CO');
 
@@ -1643,7 +1819,7 @@ app.post('/api/simulaciones', authenticateToken, idempotencyMiddleware, async (r
       `INSERT INTO simulaciones (fecha, peso_pie, costo_total, carne_kg, real_costo_kg, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [dateStr, Number(pesoPie), Number(costoTotal), Number(carneKg), Number(realCostoKg), req.user.id]
+      [dateStr, Number(pesoPie), Number(costoTotal), Number(carneKg), Number(realCostoKg), tenantId]
     );
 
     const s = result.rows[0];
@@ -1664,7 +1840,8 @@ app.post('/api/simulaciones', authenticateToken, idempotencyMiddleware, async (r
 app.delete('/api/simulaciones/:id', authenticateToken, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    await pool.query('DELETE FROM simulaciones WHERE id = $1', [id]);
+    const tenantId = getReqTenantId(req);
+    await pool.query('DELETE FROM simulaciones WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error al eliminar simulación:', err);
@@ -1673,12 +1850,13 @@ app.delete('/api/simulaciones/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================================================
-// 💰 CONTABILIDAD (TRANSACCIONES)
+// 💰 CONTABILIDAD (TRANSACCIONES) (Aisladas por Tenant)
 // ============================================================================
 
 app.get('/api/transacciones', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM transacciones ORDER BY created_at DESC');
+    const tenantId = getReqTenantId(req);
+    const result = await pool.query('SELECT * FROM transacciones WHERE tenant_id = $1 ORDER BY created_at DESC', [tenantId]);
     res.json(result.rows.map(t => ({
       id: t.id,
       tipo: t.tipo,
@@ -1695,6 +1873,7 @@ app.get('/api/transacciones', authenticateToken, async (req, res) => {
 
 app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { descripcion, monto, metodoPago, items, cliente } = req.body;
     const numMonto = Number(monto);
     
@@ -1702,15 +1881,17 @@ app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware,
       return res.status(400).json({ error: 'El monto del ingreso debe ser un número mayor a 0 y el método de pago es obligatorio.' });
     }
 
-    // 1. Si vienen ítems de productos vendidos (Flujo POS), verificar y descontar stock
+    // 1. Si vienen ítems de productos vendidos (Flujo POS), verificar y descontar stock dentro del tenant
     if (items && Array.isArray(items) && items.length > 0) {
-      // Validar stock de todos los productos primero
       const deductions = [];
 
       for (const item of items) {
-        const prodCheck = await pool.query('SELECT id, nombre, stock, precio_venta, descuento, unidad_medida FROM inventario WHERE id = $1', [item.productoId]);
+        const prodCheck = await pool.query(
+          'SELECT id, nombre, stock, precio_venta, descuento, unidad_medida FROM inventario WHERE id = $1 AND tenant_id = $2', 
+          [item.productoId, tenantId]
+        );
         if (prodCheck.rows.length === 0) {
-          return res.status(400).json({ error: `El producto "${item.nombre || item.productoId}" no existe en el inventario.` });
+          return res.status(400).json({ error: `El producto "${item.nombre || item.productoId}" no existe en su inventario.` });
         }
         const prod = prodCheck.rows[0];
         const soldQty = Number(item.cantidad);
@@ -1738,20 +1919,20 @@ app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware,
       // Descontar stock atómicamente
       for (const d of deductions) {
         await pool.query(
-          'UPDATE inventario SET stock = GREATEST(0, stock - $1) WHERE id = $2',
-          [d.stockDeduction, d.productoId]
+          'UPDATE inventario SET stock = GREATEST(0, stock - $1) WHERE id = $2 AND tenant_id = $3',
+          [d.stockDeduction, d.productoId, tenantId]
         );
       }
 
       // Registrar pedido completado para trazabilidad
-      const countOrders = await pool.query('SELECT count(*) FROM pedidos');
+      const countOrders = await pool.query('SELECT count(*) FROM pedidos WHERE tenant_id = $1', [tenantId]);
       const orderId = `PED-POS-${100 + Number(countOrders.rows[0].count) + 1}`;
       const dateStr = new Date().toLocaleDateString('es-CO');
 
       await pool.query(
         `INSERT INTO pedidos (id, cliente, total, estado, metodo_pago, fecha, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [orderId, cliente || 'Cliente Mostrador', Number(monto), 'Entregado', metodoPago, dateStr, req.user.id]
+        [orderId, cliente || 'Cliente Mostrador', Number(monto), 'Entregado', metodoPago, dateStr, tenantId]
       );
 
       for (const d of deductions) {
@@ -1763,7 +1944,7 @@ app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware,
       }
     }
 
-    const countTrx = await pool.query('SELECT count(*) FROM transacciones');
+    const countTrx = await pool.query('SELECT count(*) FROM transacciones WHERE tenant_id = $1', [tenantId]);
     const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
     const nowStr = new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'});
 
@@ -1775,7 +1956,7 @@ app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware,
       `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [trxId, 'Ingreso', descripcion || defaultDesc, Number(monto), metodoPago, nowStr, req.user.id]
+      [trxId, 'Ingreso', descripcion || defaultDesc, Number(monto), metodoPago, nowStr, tenantId]
     );
 
     const t = result.rows[0];
@@ -1795,6 +1976,7 @@ app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware,
 
 app.post('/api/transacciones/egreso', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
+    const tenantId = getReqTenantId(req);
     const { descripcion, monto, metodoPago } = req.body;
     const numMonto = Number(monto);
     
@@ -1802,7 +1984,7 @@ app.post('/api/transacciones/egreso', authenticateToken, idempotencyMiddleware, 
       return res.status(400).json({ error: 'La descripción y un monto numérico positivo mayor a 0 son obligatorios.' });
     }
 
-    const countTrx = await pool.query('SELECT count(*) FROM transacciones');
+    const countTrx = await pool.query('SELECT count(*) FROM transacciones WHERE tenant_id = $1', [tenantId]);
     const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
     const nowStr = new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'});
 
@@ -1810,7 +1992,7 @@ app.post('/api/transacciones/egreso', authenticateToken, idempotencyMiddleware, 
       `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [trxId, 'Egreso', descripcion, Number(monto), metodoPago || 'Efectivo', nowStr, req.user.id]
+      [trxId, 'Egreso', descripcion, Number(monto), metodoPago || 'Efectivo', nowStr, tenantId]
     );
 
     const t = result.rows[0];
@@ -1838,4 +2020,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
-

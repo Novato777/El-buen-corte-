@@ -49,7 +49,29 @@ const formatCOP = (val) => {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api'
 
+// Helper para extraer el parámetro de sede/tenant desde la URL (query o hash)
+const getTenantParam = () => {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryTenant = urlParams.get('tenant') || urlParams.get('tenantId') || urlParams.get('sede');
+    if (queryTenant) return queryTenant;
+
+    if (window.location.hash) {
+      const hashQuery = window.location.hash.split('?')[1];
+      if (hashQuery) {
+        const hashParams = new URLSearchParams(hashQuery);
+        const hashTenant = hashParams.get('tenant') || hashParams.get('tenantId') || hashParams.get('sede');
+        if (hashTenant) return hashTenant;
+      }
+    }
+  } catch(e) {}
+  return '';
+};
+
 export default function PublicTiendaVirtual() {
+  const activeTenantId = getTenantParam()
+  const cartStorageKey = `elbuencorte_public_cart_${activeTenantId || 'default'}`
+
   const [productos, setProductos] = useState([])
   const [perfil, setPerfil] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -64,7 +86,7 @@ export default function PublicTiendaVirtual() {
   // Cart state (stored in localStorage for persistence across reloads)
   const [cart, setCart] = useState(() => {
     try {
-      const saved = localStorage.getItem('elbuencorte_public_cart')
+      const saved = localStorage.getItem(cartStorageKey)
       return saved ? JSON.parse(saved) : []
     } catch {
       return []
@@ -109,20 +131,22 @@ export default function PublicTiendaVirtual() {
   // Save cart to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('elbuencorte_public_cart', JSON.stringify(cart))
+      localStorage.setItem(cartStorageKey, JSON.stringify(cart))
     } catch (e) {
       console.error('Error saving cart to storage:', e)
     }
-  }, [cart])
+  }, [cart, cartStorageKey])
 
   // Fetch public catalog and business profile
   const fetchStoreData = async () => {
     setLoading(true)
     setError('')
     try {
+      const tenantParam = getTenantParam()
+      const tenantQuery = tenantParam ? `?tenantId=${encodeURIComponent(tenantParam)}` : ''
       const [prodRes, profileRes] = await Promise.all([
-        fetch(`${API_BASE}/public/productos`),
-        fetch(`${API_BASE}/public/perfil`)
+        fetch(`${API_BASE}/public/productos${tenantQuery}`),
+        fetch(`${API_BASE}/public/perfil${tenantQuery}`)
       ])
 
       if (!prodRes.ok) throw new Error('No se pudo cargar el catálogo de productos.')
@@ -539,12 +563,15 @@ export default function PublicTiendaVirtual() {
       return
     }
 
+    const currentTenantId = getTenantParam() || perfil?.tenant_id || 1
+
     const orderPayload = {
       cliente: checkoutForm.cliente.trim(),
       telefono: checkoutForm.telefono.trim(),
       direccion: checkoutForm.direccion.trim(),
       metodoPago: checkoutForm.metodoPago,
       notas: checkoutForm.notas.trim(),
+      tenantId: currentTenantId,
       items: cart.map(item => ({
         productoId: item.id,
         nombre: item.nombre,
@@ -587,8 +614,9 @@ export default function PublicTiendaVirtual() {
 
       const createdOrder = await res.json()
 
-      // Notificar al Dashboard en tiempo real (sonido + alerta)
+      // Notificar al Dashboard de la sede correspondiente en tiempo real (sonido + alerta)
       try {
+        const orderTenant = createdOrder.tenantId || currentTenantId
         if ('BroadcastChannel' in window) {
           const bc = new BroadcastChannel('el_buen_corte_channel')
           bc.postMessage({
@@ -596,7 +624,8 @@ export default function PublicTiendaVirtual() {
             order: createdOrder,
             cliente: checkoutForm.cliente,
             total: currentTotalSnapshot,
-            id: createdOrder.id
+            id: createdOrder.id,
+            tenantId: orderTenant
           })
           bc.close()
         }
@@ -604,6 +633,7 @@ export default function PublicTiendaVirtual() {
           id: createdOrder.id,
           cliente: checkoutForm.cliente,
           total: currentTotalSnapshot,
+          tenantId: orderTenant,
           time: Date.now()
         }))
       } catch (bcErr) {
