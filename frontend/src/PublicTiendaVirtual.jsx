@@ -377,6 +377,10 @@ export default function PublicTiendaVirtual() {
       triggerFlyAnimation(product, event)
     }
 
+    const originalPrice = Number(product.precioVenta)
+    const discount = Number(product.descuento) || 0
+    const effectivePrice = discount > 0 ? (originalPrice * (1 - discount / 100)) : originalPrice
+
     setCart((prevCart) => {
       const existingIndex = prevCart.findIndex(item => item.id === product.id)
       if (existingIndex > -1) {
@@ -386,7 +390,10 @@ export default function PublicTiendaVirtual() {
         updated[existingIndex] = {
           ...updated[existingIndex],
           cantidad: newQty,
-          stockMax: realStock
+          stockMax: realStock,
+          precioVenta: effectivePrice,
+          precioOriginal: originalPrice,
+          descuento: discount
         }
         return updated
       } else {
@@ -394,7 +401,9 @@ export default function PublicTiendaVirtual() {
         return [...prevCart, {
           id: product.id,
           nombre: product.nombre,
-          precioVenta: Number(product.precioVenta),
+          precioVenta: effectivePrice,
+          precioOriginal: originalPrice,
+          descuento: discount,
           foto: product.foto || '',
           categoria: product.categoria || 'Carnes',
           cantidad: initialQty,
@@ -441,34 +450,43 @@ export default function PublicTiendaVirtual() {
     setShowCheckoutModal(true)
   }
 
-  // Helper para construir el enlace de WhatsApp con el mensaje de confirmación
+  // Helper para construir el enlace de WhatsApp con un mensaje estructurado y ultra-premium
   const generateWhatsAppOrderUrl = (orderData, clientData, itemsList, totalAmount) => {
-    const clientName = clientData.cliente.trim()
-    const clientPhone = clientData.telefono.trim()
-    const clientAddress = clientData.direccion.trim()
+    const clientName = clientData.cliente?.trim() || 'Cliente'
+    const clientPhone = clientData.telefono?.trim() || ''
+    const clientAddress = clientData.direccion?.trim() || 'Entrega en el local / Punto de venta'
     const paymentMethod = clientData.metodoPago || 'Efectivo'
     const notes = clientData.notas?.trim()
+    const orderCode = orderData?.id ? `#${orderData.id}` : 'PENDIENTE'
 
-    // Lista de productos del carrito con formato: • {cantidad} x {nombre} — ${precio}
-    const productsFormatted = itemsList.map(item => `• ${item.cantidad} x ${item.nombre} — ${formatCOP(item.precioVenta * item.cantidad)}`).join('\n')
+    // Formatear cada producto con icono cárnico, cantidad, nombre y subtotal
+    const productsFormatted = itemsList.map(item => {
+      const subtotal = item.precioVenta * item.cantidad
+      return `🥩 *${item.cantidad} x ${item.nombre}*\n   └ Subtotal: *${formatCOP(subtotal)}*`
+    }).join('\n\n')
 
-    // Estructura requerida:
-    let message = `Hola, *${storeName}* 👋\n\n`
-    message += `Soy *${clientName}* y quisiera confirmar mi pedido del día de hoy.\n\n`
-    message += `🛒 *Mi pedido es:*\n${productsFormatted}\n\n`
-    message += `💰 *Valor total del pedido: ${formatCOP(totalAmount)}*\n`
-    message += `📍 *Dirección de entrega:* ${clientAddress}\n`
-    message += `💵 *Método de pago:* ${paymentMethod}\n`
+    // Construcción del mensaje elegante, estructurado y con emoticones de alto impacto
+    let message = `🥩✨ *¡NUEVO PEDIDO — ${storeName.toUpperCase()}!* ✨🥩\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    message += `👋 *¡Hola, equipo de ${storeName}!* 👋\n`
+    message += `Soy *${clientName}* y acabo de registrar mi orden a través de la tienda virtual:\n\n`
+    message += `📋 *DETALLE DE CORTES SOLICITADOS:* 🥩\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `${productsFormatted}\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`
+    message += `💵 *RESUMEN DE PAGO & ENTREGA:* 📦\n`
+    message += `💰 *Total a Pagar:* *${formatCOP(totalAmount)}*\n`
+    message += `💳 *Método de Pago:* ${paymentMethod}\n`
+    message += `📍 *Dirección de Entrega:* ${clientAddress}\n`
     if (clientPhone) {
-      message += `📞 *Teléfono de contacto:* ${clientPhone}\n`
+      message += `📱 *Teléfono de Contacto:* ${clientPhone}\n`
     }
-    if (orderData?.id) {
-      message += `🔖 *Código de orden:* ${orderData.id}\n`
-    }
+    message += `🆔 *Código de Orden:* *${orderCode}*\n`
     if (notes) {
-      message += `📝 *Instrucciones para el carnicero:* ${notes}\n`
+      message += `📝 *Instrucciones para el Carnicero:* ${notes}\n`
     }
-    message += `\nQuedo atento(a) a la confirmación de mi pedido. ¡Muchas gracias!`
+    message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `🚚 *Quedo muy atento(a) a la confirmación de mi pedido y tiempo estimado de entrega. ¡Muchas gracias!* ✨🥩`
 
     return `https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(message)}`
   }
@@ -799,7 +817,24 @@ export default function PublicTiendaVirtual() {
 
                       <div className="suggested-slide-footer">
                         <div className="suggested-slide-price">
-                          {formatCOP(currentSuggested.precioVenta)} <span>/ kg</span>
+                          {Number(currentSuggested.descuento) > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', textDecoration: 'line-through' }}>
+                                {formatCOP(currentSuggested.precioVenta)}
+                              </span>
+                              <span style={{ fontSize: '24px', fontWeight: '900', color: '#fca5a5' }}>
+                                {formatCOP(currentSuggested.precioVenta * (1 - currentSuggested.descuento / 100))}
+                              </span>
+                              <span style={{ fontSize: '12px', opacity: 0.8 }}>/ kg</span>
+                              <span style={{ fontSize: '10.5px', background: '#dc2626', color: '#ffffff', fontWeight: '900', padding: '2px 7px', borderRadius: '6px' }}>
+                                🔥 {currentSuggested.descuento}% OFF
+                              </span>
+                            </div>
+                          ) : (
+                            <div>
+                              {formatCOP(currentSuggested.precioVenta)} <span>/ kg</span>
+                            </div>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -1005,7 +1040,7 @@ export default function PublicTiendaVirtual() {
 
                 return (
                   <div key={product.id} className="tienda-card">
-                    {/* Imagen y Badge de Stock */}
+                    {/* Imagen y Badges */}
                     <div 
                       className="tienda-card-img-wrapper"
                       onClick={() => { setSelectedProductDetail(product); setDetailModalQty(1); }}
@@ -1015,6 +1050,25 @@ export default function PublicTiendaVirtual() {
                         <img src={product.foto} alt={product.nombre} loading="lazy" />
                       ) : (
                         <span style={{ fontSize: '48px' }}>🥩</span>
+                      )}
+
+                      {/* Badge de Descuento */}
+                      {Number(product.descuento) > 0 && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '10px',
+                          left: '10px',
+                          background: '#dc2626',
+                          color: '#ffffff',
+                          fontWeight: '900',
+                          fontSize: '11px',
+                          padding: '3px 7px',
+                          borderRadius: '7px',
+                          zIndex: 2,
+                          boxShadow: '0 2px 8px rgba(220, 38, 38, 0.4)'
+                        }}>
+                          🔥 {product.descuento}% OFF
+                        </span>
                       )}
 
                       {isOutOfStock ? (
@@ -1041,10 +1095,22 @@ export default function PublicTiendaVirtual() {
                       </p>
 
                       <div className="tienda-card-price-row">
-                        <div className="tienda-card-price">
-                          {formatCOP(product.precioVenta)}
-                          <span className="tienda-card-price-unit">/ kg</span>
-                        </div>
+                        {Number(product.descuento) > 0 ? (
+                          <div className="tienda-card-price" style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                            <span style={{ fontSize: '11.5px', color: '#94a3b8', textDecoration: 'line-through' }}>
+                              {formatCOP(product.precioVenta)}
+                            </span>
+                            <span style={{ color: '#dc2626', fontWeight: '900' }}>
+                              {formatCOP(product.precioVenta * (1 - product.descuento / 100))}
+                            </span>
+                            <span className="tienda-card-price-unit">/ kg</span>
+                          </div>
+                        ) : (
+                          <div className="tienda-card-price">
+                            {formatCOP(product.precioVenta)}
+                            <span className="tienda-card-price-unit">/ kg</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Botón o Stepper de Carrito */}
@@ -1426,7 +1492,7 @@ export default function PublicTiendaVirtual() {
                       {storeEmail && <div><strong>Email:</strong> {storeEmail}</div>}
                     </div>
                     <a
-                      href={`https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`Hola ${storeName}, quiero consultar sobre sus servicios y cortes.`)}`}
+                      href={`https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`👋 ¡Hola, ${storeName}! Quisiera consultar sobre sus cortes de carne seleccionados y disponibilidad. 🥩✨`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-success"
@@ -1569,8 +1635,13 @@ export default function PublicTiendaVirtual() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span className="badge badge-secondary">{selectedProductDetail.categoria || 'Carnes'}</span>
+                    {Number(selectedProductDetail.descuento) > 0 && (
+                      <span className="badge" style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '800' }}>
+                        🔥 {selectedProductDetail.descuento}% Descuento
+                      </span>
+                    )}
                     {Number(selectedProductDetail.stock) > 0 ? (
                       <span className="badge badge-success">Disponible: {selectedProductDetail.stock} kg</span>
                     ) : (
@@ -1578,9 +1649,21 @@ export default function PublicTiendaVirtual() {
                     )}
                   </div>
 
-                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#dc2626' }}>
-                    {formatCOP(selectedProductDetail.precioVenta)} <span style={{ fontSize: '13px', color: '#64748b' }}>/ kg</span>
-                  </div>
+                  {Number(selectedProductDetail.descuento) > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                      <span style={{ fontSize: '16px', color: '#94a3b8', textDecoration: 'line-through' }}>
+                        {formatCOP(selectedProductDetail.precioVenta)}
+                      </span>
+                      <span style={{ fontSize: '26px', fontWeight: '900', color: '#dc2626' }}>
+                        {formatCOP(selectedProductDetail.precioVenta * (1 - selectedProductDetail.descuento / 100))}
+                      </span>
+                      <span style={{ fontSize: '13px', color: '#64748b' }}>/ kg</span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '24px', fontWeight: '900', color: '#dc2626' }}>
+                      {formatCOP(selectedProductDetail.precioVenta)} <span style={{ fontSize: '13px', color: '#64748b' }}>/ kg</span>
+                    </div>
+                  )}
 
                   <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: '1.5' }}>
                     {selectedProductDetail.descripcion || 'Corte fresco de primera calidad, preparado y almacenado bajo estrictos controles sanitarios para conservar toda su jugosidad y textura.'}

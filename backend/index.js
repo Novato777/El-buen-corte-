@@ -194,6 +194,7 @@ const initDatabase = async () => {
       );
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS foto TEXT;
+      ALTER TABLE inventario ADD COLUMN IF NOT EXISTS descuento NUMERIC(5, 2) NOT NULL DEFAULT 0;
     `);
 
     // 5. Tabla de Pedidos
@@ -820,6 +821,7 @@ app.get('/api/public/productos', async (req, res) => {
       descripcion: r.descripcion,
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
+      descuento: Number(r.descuento || 0),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -1074,6 +1076,7 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
       descripcion: r.descripcion,
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
+      descuento: Number(r.descuento || 0),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -1088,7 +1091,7 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
 // Crear producto en el inventario
 app.post('/api/inventario', authenticateToken, async (req, res) => {
   try {
-    const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto } = req.body;
+    const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto, descuento } = req.body;
     
     if (!nombre || !precioVenta || !categoria) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precioVenta, categoria)' });
@@ -1100,8 +1103,8 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
     const nuevoId = String(ids.length > 0 ? Math.max(...ids) + 1 : 1);
     
     const result = await pool.query(
-      `INSERT INTO inventario (id, nombre, categoria, descripcion, foto, precio_venta, stock, limite_min, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO inventario (id, nombre, categoria, descripcion, foto, precio_venta, stock, limite_min, descuento, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         nuevoId,
@@ -1112,6 +1115,7 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
         Number(precioVenta),
         Number(stock) || 0,
         Number(limiteMin) || 0,
+        Math.max(0, Math.min(100, Number(descuento) || 0)),
         req.user.id
       ]
     );
@@ -1124,12 +1128,48 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
       descripcion: r.descripcion,
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
+      descuento: Number(r.descuento || 0),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min)
     });
   } catch (err) {
     console.error('Error al crear producto:', err);
     res.status(500).json({ error: 'Error al crear el producto' });
+  }
+});
+
+// Actualizar descuento de un producto
+app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { descuento } = req.body;
+    const numDescuento = Math.max(0, Math.min(100, Number(descuento) || 0));
+
+    const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [id]);
+    if (findResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    const updateResult = await pool.query(
+      'UPDATE inventario SET descuento = $1 WHERE id = $2 RETURNING *',
+      [numDescuento, id]
+    );
+
+    const r = updateResult.rows[0];
+    res.json({
+      id: r.id,
+      nombre: r.nombre,
+      categoria: r.categoria,
+      descripcion: r.descripcion,
+      foto: r.foto,
+      precioVenta: Number(r.precio_venta),
+      descuento: Number(r.descuento || 0),
+      stock: Number(r.stock),
+      limiteMin: Number(r.limite_min)
+    });
+  } catch (err) {
+    console.error('Error al actualizar descuento:', err);
+    res.status(500).json({ error: 'Error al actualizar descuento del producto' });
   }
 });
 
@@ -1542,21 +1582,71 @@ app.get('/api/transacciones', authenticateToken, async (req, res) => {
 
 app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
   try {
-    const { descripcion, monto, metodoPago } = req.body;
+    const { descripcion, monto, metodoPago, items, cliente } = req.body;
     
-    if (!descripcion || !monto || !metodoPago) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios (descripcion, monto, metodoPago)' });
+    if (!monto || !metodoPago) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios (monto, metodoPago)' });
+    }
+
+    // 1. Si vienen ítems de productos vendidos (Flujo POS), verificar y descontar stock
+    if (items && Array.isArray(items) && items.length > 0) {
+      // Validar stock de todos los productos primero
+      for (const item of items) {
+        const prodCheck = await pool.query('SELECT id, nombre, stock FROM inventario WHERE id = $1', [item.productoId]);
+        if (prodCheck.rows.length === 0) {
+          return res.status(400).json({ error: `El producto "${item.nombre || item.productoId}" no existe en el inventario.` });
+        }
+        const currentStock = Number(prodCheck.rows[0].stock);
+        const qtyToDeduct = Number(item.cantidad);
+        if (currentStock < qtyToDeduct) {
+          return res.status(400).json({ 
+            error: `Stock insuficiente para "${prodCheck.rows[0].nombre}". Stock actual: ${currentStock.toFixed(2)}, solicitado: ${qtyToDeduct.toFixed(2)}` 
+          });
+        }
+      }
+
+      // Descontar stock atómicamente
+      for (const item of items) {
+        const qtyToDeduct = Number(item.cantidad);
+        await pool.query(
+          'UPDATE inventario SET stock = GREATEST(0, stock - $1) WHERE id = $2',
+          [qtyToDeduct, item.productoId]
+        );
+      }
+
+      // Registrar pedido completado para trazabilidad
+      const countOrders = await pool.query('SELECT count(*) FROM pedidos');
+      const orderId = `PED-POS-${100 + Number(countOrders.rows[0].count) + 1}`;
+      const dateStr = new Date().toLocaleDateString('es-CO');
+
+      await pool.query(
+        `INSERT INTO pedidos (id, cliente, total, estado, metodo_pago, fecha, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [orderId, cliente || 'Cliente Mostrador', Number(monto), 'Entregado', metodoPago, dateStr, req.user.id]
+      );
+
+      for (const item of items) {
+        await pool.query(
+          `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [orderId, item.productoId, item.nombre, Number(item.cantidad), Number(item.precio || item.precioUnitario || 0)]
+        );
+      }
     }
 
     const countTrx = await pool.query('SELECT count(*) FROM transacciones');
     const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
     const nowStr = new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'});
 
+    const defaultDesc = (items && items.length > 0)
+      ? `Venta POS: ${items.map(i => `${i.cantidad} ${i.unidad || 'kg'} de ${i.nombre}`).join(', ')}`
+      : 'Ingreso extraordinario a caja';
+
     const result = await pool.query(
       `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [trxId, 'Ingreso', descripcion, Number(monto), metodoPago, nowStr, req.user.id]
+      [trxId, 'Ingreso', descripcion || defaultDesc, Number(monto), metodoPago, nowStr, req.user.id]
     );
 
     const t = result.rows[0];
@@ -1569,8 +1659,8 @@ app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
       fecha: t.fecha
     });
   } catch (err) {
-    console.error('Error al registrar ingreso:', err);
-    res.status(500).json({ error: 'Error al registrar ingreso' });
+    console.error('Error al registrar ingreso/venta POS:', err);
+    res.status(500).json({ error: 'Error al registrar ingreso: ' + err.message });
   }
 });
 
