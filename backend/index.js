@@ -36,52 +36,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Inicializar la tabla de usuarios en PostgreSQL si no existe
-const initAuthDb = async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS usuarios (
-        id SERIAL PRIMARY KEY,
-        nombre VARCHAR(100) NOT NULL,
-        email VARCHAR(150) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        rol VARCHAR(50) NOT NULL DEFAULT 'admin',
-        activo BOOLEAN NOT NULL DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
-    `);
-
-    // 1. Asegurar usuario Super Administrador por defecto
-    const superCheck = await pool.query(
-      "SELECT id FROM usuarios WHERE LOWER(email) = 'superadmin@elbuencorte.com' OR rol = 'superadmin'"
-    );
-    if (superCheck.rows.length === 0) {
-      const superPasswordHash = await bcrypt.hash('superadmin123', 10);
-      await pool.query(
-        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5)`,
-        ['Super Administrador Master', 'superadmin@elbuencorte.com', 'superadmin', superPasswordHash, 'superadmin']
-      );
-      console.log('👑 Super Administrador creado exitosamente: superadmin@elbuencorte.com / superadmin123');
-    }
-
-    // 2. Crear usuario admin por defecto si no existe
-    const adminCheck = await pool.query(
-      "SELECT id FROM usuarios WHERE LOWER(email) = 'admin@elbuencorte.com'"
-    );
-    if (adminCheck.rows.length === 0) {
-      const defaultPasswordHash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        `INSERT INTO usuarios (nombre, email, password, rol) VALUES ($1, $2, $3, $4)`,
-        ['Administrador El Buen Corte', 'admin@elbuencorte.com', defaultPasswordHash, 'admin']
-      );
-      console.log('👤 Usuario Administrador por defecto preparado: admin@elbuencorte.com / admin123');
-    }
-  } catch (err) {
-    console.error('⚠️ Error al inicializar tabla de usuarios:', err.message);
-  }
-};
-
 // Helper para formato de moneda COP en notificaciones y mensajes
 const formatCOP = (val) => {
   return Number(val || 0).toLocaleString('es-CO', {
@@ -92,9 +46,107 @@ const formatCOP = (val) => {
   });
 };
 
-// Inicializar la tabla de notificaciones en PostgreSQL
-const initNotificationsDb = async () => {
+// Datos de Perfil por Defecto (como fallback y seed inicial)
+const DEFAULT_PROFILE = {
+  general: {
+    nombre: 'El Buen Corte',
+    nombreComercial: '',
+    razonSocial: 'El Buen Corte S.A.S.',
+    tipoNegocio: 'Carnicería',
+    tipoNegocioOtro: '',
+    descripcion: 'Carnicería premium especializada en cortes finos de res, cerdo y embutidos artesanales.',
+    anoCreacion: '2024',
+    estado: 'Activo'
+  },
+  identidad: { logo: '', portada: '' },
+  contacto: {
+    telefonoPrincipal: '+57 322 206 7870',
+    telefonoSecundario: '',
+    whatsapp: '+57 322 206 7870',
+    email: 'cardozobrayan334@gmail.com',
+    sitioWeb: 'https://elbuencorte.com'
+  },
+  ubicacion: {
+    pais: 'Colombia',
+    departamento: 'Cundinamarca',
+    ciudad: 'Bogotá',
+    direccion: 'Calle 80 #15-20',
+    codigoPostal: '110111',
+    latitud: '',
+    longitud: ''
+  },
+  redes: [
+    { id: '1', plataforma: 'Facebook', usuario: 'El Buen Corte', url: 'https://facebook.com/elbuencorte' },
+    { id: '2', plataforma: 'Instagram', usuario: '@elbuencorte', url: 'https://instagram.com/elbuencorte' }
+  ],
+  horarios: {
+    'Lunes': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Martes': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Miércoles': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Jueves': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Viernes': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Sábado': { abierto: true, apertura: '08:00', cierre: '20:00' },
+    'Domingo': { abierto: false, apertura: '09:00', cierre: '14:00' }
+  },
+  financiero: {
+    moneda: 'COP',
+    simbolo: '$',
+    nit: '901.234.567-8',
+    responsable: 'Brayan Cardozo'
+  },
+  adicional: {
+    mision: 'Proveer los mejores cortes de carne con altos estándares de higiene y servicio excepcional.',
+    vision: 'Ser la carnicería líder y de confianza preferida por los hogares y restaurantes de la región.',
+    servicios: ['Venta de carnes', 'Servicio a domicilio', 'Cortes personalizados', 'Empaque al vacío']
+  }
+};
+
+// Inicializar todas las tablas y datos iniciales en PostgreSQL
+const initDatabase = async () => {
   try {
+    // 1. Tabla de Usuarios
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        email VARCHAR(150) UNIQUE NOT NULL,
+        username VARCHAR(100),
+        password VARCHAR(255) NOT NULL,
+        rol VARCHAR(50) NOT NULL DEFAULT 'admin',
+        activo BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username VARCHAR(100);
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
+    `);
+
+    // 1.1 Asegurar Super Administrador por defecto
+    const superCheck = await pool.query(
+      "SELECT id FROM usuarios WHERE LOWER(email) = 'superadmin@elbuencorte.com' OR rol = 'superadmin'"
+    );
+    if (superCheck.rows.length === 0) {
+      const superPasswordHash = await bcrypt.hash('superadmin123', 10);
+      await pool.query(
+        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5)`,
+        ['Super Administrador Master', 'superadmin@elbuencorte.com', 'superadmin', superPasswordHash, 'superadmin']
+      );
+      console.log('👑 Super Administrador creado: superadmin@elbuencorte.com / superadmin123');
+    }
+
+    // 1.2 Asegurar Administrador por defecto
+    const adminCheck = await pool.query(
+      "SELECT id FROM usuarios WHERE LOWER(email) = 'admin@elbuencorte.com'"
+    );
+    if (adminCheck.rows.length === 0) {
+      const defaultPasswordHash = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        `INSERT INTO usuarios (nombre, email, username, password, rol) VALUES ($1, $2, $3, $4, $5)`,
+        ['Administrador El Buen Corte', 'admin@elbuencorte.com', 'admin', defaultPasswordHash, 'admin']
+      );
+      console.log('👤 Usuario Administrador creado: admin@elbuencorte.com / admin123');
+    }
+
+    // 2. Tabla de Notificaciones
     await pool.query(`
       CREATE TABLE IF NOT EXISTS notificaciones (
         id SERIAL PRIMARY KEY,
@@ -107,14 +159,151 @@ const initNotificationsDb = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('🔔 Tabla de notificaciones lista en PostgreSQL.');
+
+    // 3. Tabla de Perfil de Negocio
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS business_profile (
+        id SERIAL PRIMARY KEY,
+        general JSONB NOT NULL,
+        identidad JSONB NOT NULL,
+        contacto JSONB NOT NULL,
+        ubicacion JSONB NOT NULL,
+        redes JSONB NOT NULL,
+        horarios JSONB NOT NULL,
+        financiero JSONB NOT NULL,
+        adicional JSONB NOT NULL,
+        tenant_id INTEGER,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE business_profile ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+    `);
+
+    // 4. Tabla de Inventario de Productos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inventario (
+        id VARCHAR(50) PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        categoria VARCHAR(50) NOT NULL,
+        descripcion TEXT,
+        foto TEXT,
+        precio_venta NUMERIC(12, 2) NOT NULL,
+        stock NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        limite_min NUMERIC(10, 2) NOT NULL DEFAULT 10,
+        tenant_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE inventario ADD COLUMN IF NOT EXISTS foto TEXT;
+    `);
+
+    // 5. Tabla de Pedidos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id VARCHAR(50) PRIMARY KEY,
+        cliente VARCHAR(150) NOT NULL,
+        telefono VARCHAR(50),
+        direccion TEXT,
+        total NUMERIC(12, 2) NOT NULL,
+        estado VARCHAR(50) NOT NULL DEFAULT 'Pendiente',
+        metodo_pago VARCHAR(50),
+        notas TEXT,
+        fecha VARCHAR(50) NOT NULL,
+        tenant_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS direccion TEXT;
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50);
+      ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS notas TEXT;
+    `);
+
+    // 6. Tabla de Ítems del Pedido
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pedido_items (
+        id SERIAL PRIMARY KEY,
+        pedido_id VARCHAR(50) REFERENCES pedidos(id) ON DELETE CASCADE,
+        producto_id VARCHAR(50),
+        nombre VARCHAR(150) NOT NULL,
+        cantidad NUMERIC(10, 2) NOT NULL,
+        precio NUMERIC(12, 2) NOT NULL
+      );
+    `);
+
+    // 7. Tabla de Transacciones (Caja / Contabilidad)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS transacciones (
+        id VARCHAR(50) PRIMARY KEY,
+        tipo VARCHAR(50) NOT NULL,
+        descripcion TEXT NOT NULL,
+        monto NUMERIC(12, 2) NOT NULL,
+        metodo_pago VARCHAR(50),
+        fecha VARCHAR(50) NOT NULL,
+        tenant_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE transacciones ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+    `);
+
+    // 8. Tabla de Mermas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mermas (
+        id VARCHAR(50) PRIMARY KEY,
+        producto_nombre VARCHAR(150) NOT NULL,
+        peso NUMERIC(10, 2) NOT NULL,
+        motivo TEXT NOT NULL,
+        fecha VARCHAR(50) NOT NULL,
+        tenant_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE mermas ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+    `);
+
+    // 9. Tabla de Simulaciones
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS simulaciones (
+        id SERIAL PRIMARY KEY,
+        fecha VARCHAR(50) NOT NULL,
+        peso_pie NUMERIC(10, 2) NOT NULL,
+        costo_total NUMERIC(12, 2) NOT NULL,
+        carne_kg NUMERIC(10, 2) NOT NULL,
+        real_costo_kg NUMERIC(12, 2) NOT NULL,
+        tenant_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE simulaciones ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+    `);
+
+    // 10. Perfil de negocio inicial
+    const profileCheck = await pool.query('SELECT id FROM business_profile LIMIT 1');
+    if (profileCheck.rows.length === 0) {
+      await pool.query(
+        `INSERT INTO business_profile (id, general, identidad, contacto, ubicacion, redes, horarios, financiero, adicional, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          1,
+          JSON.stringify(DEFAULT_PROFILE.general),
+          JSON.stringify(DEFAULT_PROFILE.identidad),
+          JSON.stringify(DEFAULT_PROFILE.contacto),
+          JSON.stringify(DEFAULT_PROFILE.ubicacion),
+          JSON.stringify(DEFAULT_PROFILE.redes),
+          JSON.stringify(DEFAULT_PROFILE.horarios),
+          JSON.stringify(DEFAULT_PROFILE.financiero),
+          JSON.stringify(DEFAULT_PROFILE.adicional),
+          1
+        ]
+      );
+      console.log('🏢 Perfil de negocio inicial sembrado.');
+    }
+
+    console.log('✅ Esquema de base de datos PostgreSQL verificado y listo.');
   } catch (err) {
-    console.error('⚠️ Error al inicializar tabla de notificaciones:', err.message);
+    console.error('⚠️ Error al inicializar base de datos PostgreSQL:', err.message);
   }
 };
 
-initAuthDb();
-initNotificationsDb();
+initDatabase();
 
 // Datos de Perfil por Defecto (como fallback)
 const DEFAULT_PROFILE = {

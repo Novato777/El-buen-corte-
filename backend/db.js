@@ -5,21 +5,25 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Si la URL no tiene localhost, asumimos conexión en la nube (Neon) y requerimos SSL
-const isLocal = process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1');
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocal = !dbUrl || dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl || 'postgresql://postgres:postgres@localhost:5432/el_buen_corte',
   ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
 // Probar conexión al arrancar el servidor
-pool.query('SELECT NOW()')
-  .then(() => {
-    console.log('⚡ Conexión exitosa a la base de datos PostgreSQL.');
-  })
-  .catch(err => {
-    console.error('❌ Error al conectar a PostgreSQL:', err.message);
-  });
+if (dbUrl) {
+  pool.query('SELECT NOW()')
+    .then(() => {
+      console.log('⚡ Conexión exitosa a la base de datos PostgreSQL.');
+    })
+    .catch(err => {
+      console.error('❌ Error al conectar a PostgreSQL:', err.message);
+    });
+} else {
+  console.warn('⚠️ Advertencia: DATABASE_URL no está configurada en las variables de entorno.');
+}
 
 export default pool;

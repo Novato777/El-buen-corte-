@@ -1619,15 +1619,15 @@ function App() {
     if (e) e.preventDefault()
     
     // Validations
-    if (!profileForm.general.nombre.trim()) {
+    if (!profileForm.general?.nombre?.trim()) {
       alert("❌ El nombre del negocio es obligatorio.")
       return
     }
-    if (profileForm.contacto.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileForm.contacto.email)) {
+    if (profileForm.contacto?.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileForm.contacto.email)) {
       alert("❌ Ingresa un correo electrónico válido.")
       return
     }
-    if (profileForm.contacto.sitioWeb && !/^https?:\/\/[^\s$.?#].[^\s]*$/.test(profileForm.contacto.sitioWeb)) {
+    if (profileForm.contacto?.sitioWeb && !/^https?:\/\/[^\s$.?#].[^\s]*$/.test(profileForm.contacto.sitioWeb)) {
       alert("❌ Ingresa una URL de sitio web válida.")
       return
     }
@@ -1638,16 +1638,36 @@ function App() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(profileForm)
       })
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.error || `HTTP ${response.status}`)
+      }
       const updated = await response.json()
-      setProfileData(updated)
-      setProfileForm(updated)
-      localStorage.setItem('el_buen_corte_profile', JSON.stringify(updated))
-      alert("✅ Los cambios se guardaron correctamente.")
+      if (updated && updated.general) {
+        const merged = {
+          ...DEFAULT_PROFILE,
+          ...updated,
+          general: { ...DEFAULT_PROFILE.general, ...(updated.general || {}) },
+          identidad: { ...DEFAULT_PROFILE.identidad, ...(updated.identidad || {}) },
+          contacto: { ...DEFAULT_PROFILE.contacto, ...(updated.contacto || {}) },
+          ubicacion: { ...DEFAULT_PROFILE.ubicacion, ...(updated.ubicacion || {}) },
+          redes: updated.redes || DEFAULT_PROFILE.redes,
+          horarios: updated.horarios || DEFAULT_PROFILE.horarios,
+          financiero: { ...DEFAULT_PROFILE.financiero, ...(updated.financiero || {}) },
+          adicional: { ...DEFAULT_PROFILE.adicional, ...(updated.adicional || {}) }
+        }
+        setProfileData(merged)
+        setProfileForm(merged)
+        localStorage.setItem('el_buen_corte_profile', JSON.stringify(merged))
+        alert("✅ Los cambios se guardaron correctamente.")
+      } else {
+        throw new Error('Respuesta inválida del servidor')
+      }
     } catch (err) {
       console.warn("Error al guardar en backend, guardando localmente:", err)
       setProfileData(profileForm)
       localStorage.setItem('el_buen_corte_profile', JSON.stringify(profileForm))
-      alert("✅ Los cambios se guardaron localmente (modo offline).")
+      alert("✅ Los cambios se guardaron localmente.")
     }
   }
 
@@ -1751,15 +1771,34 @@ function App() {
       return
     }
     
-    // Validate size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      alert("❌ Tamaño de archivo superior a 2MB. Por favor sube una imagen más ligera.")
+    // Validate size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("❌ Tamaño de archivo superior a 5MB. Por favor sube una imagen más ligera.")
       return
     }
 
     const reader = new FileReader()
-    reader.onload = () => {
-      updateProfileIdentidad(field, reader.result)
+    reader.onload = async () => {
+      const base64 = reader.result
+      // Mostrar vista previa de inmediato
+      updateProfileIdentidad(field, base64)
+      
+      // Intentar subir a Cloudinary a través del backend
+      try {
+        const uploadRes = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ image: base64, folder: 'el_buen_corte/branding' })
+        })
+        if (uploadRes.ok) {
+          const data = await uploadRes.json()
+          if (data.secure_url || data.url) {
+            updateProfileIdentidad(field, data.secure_url || data.url)
+          }
+        }
+      } catch (err) {
+        console.warn('Subida a Cloudinary falló, manteniendo base64 local:', err)
+      }
     }
     reader.readAsDataURL(file)
   }

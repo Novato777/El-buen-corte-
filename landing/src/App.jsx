@@ -118,34 +118,6 @@ const PASOS = [
   { n: "3", title: "Empieza a controlar todo", text: "Vendes, registras y al final del día tienes tus reportes listos." },
 ]
 
-const PLANES = [
-  {
-    name: "Básico",
-    desc: "Para empezar a ordenar el negocio.",
-    precio: "$59.000",
-    periodo: "/mes",
-    features: ["Reportes diarios y caja", "Gestión de pedidos", "Control de inventario", "1 usuario"],
-  },
-  {
-    name: "Pro",
-    desc: "El control completo de tu carnicería.",
-    precio: "$99.000",
-    periodo: "/mes",
-    featured: true,
-    features: [
-      "Todo lo del plan Básico",
-      "Cálculo inteligente de la res",
-      "Hasta 5 usuarios",
-    ],
-  },
-  {
-    name: "A la medida",
-    desc: "Para varias sucursales o necesidades especiales.",
-    precio: "Cotización",
-    periodo: "",
-    features: ["Todo lo del plan Pro", "Multi-sucursal", "Soporte prioritario", "Usuarios ilimitados"],
-  },
-]
 
 const STATS = [
   { value: "100%", label: "Tu caja cuadrada cada día" },
@@ -258,7 +230,6 @@ function Nav() {
         <nav className="hidden items-center gap-7 text-sm font-medium text-[#c9b8a8] md:flex">
           <a href="#funciones" className="transition-colors hover:text-[#f59e0b]">Funciones</a>
           <a href="#calculadora" className="transition-colors hover:text-[#f59e0b]">Cálculo IA</a>
-          <a href="#planes" className="transition-colors hover:text-[#f59e0b]">Planes</a>
           <a href="#contacto" className="transition-colors hover:text-[#f59e0b]">Contacto</a>
         </nav>
         <Boton
@@ -614,68 +585,6 @@ function Pasos() {
   )
 }
 
-function Planes() {
-  return (
-    <section id="planes" className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-      <Reveal className="text-center">
-        <Eyebrow>Planes</Eyebrow>
-        <h2 className="mx-auto mt-4 max-w-2xl text-4xl font-black tracking-tight text-[#f3e9dc] sm:text-5xl">
-          Un precio que se paga solo
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-[#cbb8a7]">
-          Elige el plan que va con tu negocio. Cancela cuando quieras.
-        </p>
-      </Reveal>
-
-      <div className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {PLANES.map((plan, i) => (
-          <Reveal key={plan.name} delay={i * 90}>
-            <div
-              className={`flex h-full flex-col rounded-2xl border bg-[#241513] p-7 transition-all duration-300 hover:-translate-y-1 ${
-                plan.featured
-                  ? "border-[#f59e0b]/70 shadow-[0_20px_50px_-20px_rgba(245,158,11,0.5)]"
-                  : "border-[#3d2420] hover:border-[#dc2626]/60"
-              }`}
-            >
-              {plan.featured && (
-                <span className="mb-3 inline-flex w-fit rounded-full bg-[#f59e0b] px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#160d0b]">
-                  Más popular
-                </span>
-              )}
-              <h3 className="text-2xl font-extrabold text-[#f3e9dc]">{plan.name}</h3>
-              <p className="mt-1 text-sm text-[#cbb8a7]">{plan.desc}</p>
-              <div className="mt-5 flex items-end gap-1">
-                <span className="text-4xl font-black text-[#f3e9dc]">{plan.precio}</span>
-                <span className="pb-1 text-sm font-semibold text-[#cbb8a7]">{plan.periodo}</span>
-              </div>
-              <ul className="mt-6 flex-1 space-y-2.5">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm text-[#e7d8c8]">
-                    <CheckIcon className="h-4 w-4 shrink-0 text-[#dc2626]" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Boton
-                href={wa(`Hola, me interesa el plan *${plan.name}* de ${PRODUCTO.name}.`)}
-                target="_blank"
-                rel="noreferrer"
-                variant={plan.featured ? "primary" : "ghost"}
-                className="mt-6 w-full px-5 py-3"
-              >
-                {plan.precio === "Cotización" ? "Pedir cotización" : "Solicitar demo"}
-              </Boton>
-            </div>
-          </Reveal>
-        ))}
-      </div>
-      <p className="mt-6 text-center text-xs text-[#a18b7a]">
-        Precios de referencia, editables. Ajusta los valores en{" "}
-        <span className="font-mono text-[#cbb8a7]">PLANES</span> dentro de App.jsx.
-      </p>
-    </section>
-  )
-}
 
 function CTAFinal() {
   return (
@@ -777,7 +686,6 @@ function Footer() {
               {[
                 ["Funciones", "#funciones"],
                 ["Cálculo IA", "#calculadora"],
-                ["Planes", "#planes"],
                 ["Contacto", "#contacto"],
               ].map(([label, href]) => (
                 <li key={href}>
@@ -863,7 +771,6 @@ export default function App() {
       <CalculadoraRes />
       <Beneficios />
       <Pasos />
-      <Planes />
       <CTAFinal />
       <TechLoop />
       <Footer />
