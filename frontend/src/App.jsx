@@ -5300,6 +5300,178 @@ function App() {
       )}
 
       {/* ================================================================= */}
+      {/* 🏷️ MODAL: CONFIGURAR DESCUENTO EN PRODUCTO */}
+      {/* ================================================================= */}
+      {showDiscountModal && discountProduct && (
+        <div className="modal-overlay" onClick={() => !discountLoading && setShowDiscountModal(false)}>
+          <form 
+            className="modal-card animate-fade-in" 
+            onSubmit={handleSaveDiscount}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '480px', width: '92%', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+          >
+            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)'
+                }}>
+                  🏷️
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                    Aplicar Descuento a Producto
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0 0 0' }}>
+                    {discountProduct.nombre} ({discountProduct.categoria})
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowDiscountModal(false)}
+                disabled={discountLoading}
+                style={{ 
+                  border: 'none', 
+                  background: '#e2e8f0', 
+                  width: '32px', 
+                  height: '32px', 
+                  borderRadius: '50%', 
+                  fontSize: '14px', 
+                  cursor: 'pointer', 
+                  color: '#475569',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Resumen de Precios */}
+              <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Precio Base / Original</span>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
+                    {formatCOP(discountProduct.precioVenta)} <span style={{ fontSize: '12px', color: '#64748b' }}>{getPriceUnitLabel(discountProduct.unidadMedida)}</span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11.5px', color: '#dc2626', fontWeight: '700', textTransform: 'uppercase' }}>Precio con Descuento</span>
+                  <div style={{ fontSize: '20px', fontWeight: '900', color: '#dc2626' }}>
+                    {formatCOP(discountProduct.precioVenta * (1 - (Number(discountPercent) || 0) / 100))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Input de porcentaje */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Porcentaje de Descuento (%) *</span>
+                  <span style={{ color: '#dc2626', fontWeight: '800' }}>{discountPercent}% OFF</span>
+                </label>
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input 
+                    type="range"
+                    min="0"
+                    max="90"
+                    step="5"
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#dc2626', cursor: 'pointer' }}
+                  />
+                  <div style={{ position: 'relative', width: '85px', flexShrink: 0 }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      className="input-control"
+                      value={discountPercent}
+                      onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                      style={{ fontSize: '16px', fontWeight: '800', textAlign: 'center', height: '40px', padding: '0 18px 0 6px' }}
+                    />
+                    <span style={{ position: 'absolute', right: '8px', top: '10px', fontWeight: '800', color: '#64748b', fontSize: '13px' }}>%</span>
+                  </div>
+                </div>
+
+                {/* Quick discount presets */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                  {[0, 5, 10, 15, 20, 25, 30, 50].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setDiscountPercent(pct)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        border: discountPercent === pct ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
+                        background: discountPercent === pct ? '#fee2e2' : '#ffffff',
+                        color: discountPercent === pct ? '#991b1b' : '#334155',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {pct === 0 ? 'Sin Dcto (0%)' : `${pct}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '12px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <span style={{ fontSize: '18px' }}>🔥</span>
+                <p style={{ fontSize: '12px', color: '#b45309', margin: 0, lineHeight: '1.4' }}>
+                  Este descuento se aplicará automáticamente en la <strong>Tienda Virtual</strong>, en la calculadora de ventas del <strong>Punto de Venta</strong> y en los pedidos de WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowDiscountModal(false)}
+                disabled={discountLoading}
+                style={{ padding: '9px 18px', borderRadius: '10px' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                disabled={discountLoading}
+                style={{ 
+                  padding: '10px 22px', 
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  borderColor: '#dc2626',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.35)'
+                }}
+              >
+                {discountLoading ? '⏳ Guardando...' : (discountPercent === 0 ? '✓ Quitar Descuento' : `✓ Aplicar ${discountPercent}% de Descuento`)}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ================================================================= */}
       {/* MODAL: REGISTRAR MERMA */}
       {/* ================================================================= */}
       {showAddMermaModal && (
@@ -6414,18 +6586,18 @@ function App() {
             style={{ maxWidth: '480px', width: '92%', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
           >
             {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '40px',
-                  height: '40px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '12px',
                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '20px',
+                  fontSize: '19px',
                   boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)'
                 }}>
                   🏷️
@@ -6462,7 +6634,7 @@ function App() {
             </div>
 
             {/* Modal Body */}
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               {/* Product Info & Original Price */}
               <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -6489,7 +6661,7 @@ function App() {
                       type="button"
                       onClick={() => setDiscountPercent(pct)}
                       style={{
-                        padding: '8px 4px',
+                        padding: '7px 4px',
                         borderRadius: '10px',
                         border: discountPercent === pct ? '2px solid #dc2626' : '1px solid #cbd5e1',
                         background: discountPercent === pct ? '#fee2e2' : '#ffffff',
@@ -6513,14 +6685,14 @@ function App() {
                 </label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <input 
-                    type="number"
+                    type="number" 
                     min="0"
                     max="100"
                     step="1"
                     className="input-control" 
                     value={discountPercent}
                     onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                    style={{ fontSize: '18px', fontWeight: '900', height: '44px', textAlign: 'center', color: '#dc2626' }}
+                    style={{ fontSize: '18px', fontWeight: '900', height: '42px', textAlign: 'center', color: '#dc2626' }}
                   />
                   <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '900', color: '#dc2626', pointerEvents: 'none' }}>%</span>
                 </div>
@@ -6538,7 +6710,7 @@ function App() {
                     background: discountPercent > 0 ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' : '#f8fafc',
                     border: discountPercent > 0 ? '1.5px solid #fca5a5' : '1px solid #e2e8f0',
                     borderRadius: '14px',
-                    padding: '14px 18px',
+                    padding: '12px 16px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
@@ -6551,7 +6723,7 @@ function App() {
                         Precio Final a Cobrar:
                       </span>
                     </div>
-                    <strong style={{ fontSize: '22px', fontWeight: '900', color: discountPercent > 0 ? '#dc2626' : '#0f172a' }}>
+                    <strong style={{ fontSize: '20px', fontWeight: '900', color: discountPercent > 0 ? '#dc2626' : '#0f172a' }}>
                       {formatCOP(finalPrice)} <span style={{ fontSize: '12px', fontWeight: '600' }}>{uLabel}</span>
                     </strong>
                   </div>
@@ -6560,7 +6732,7 @@ function App() {
             </div>
 
             {/* Modal Footer */}
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowDiscountModal(false)} disabled={discountLoading}>
                 Cancelar
               </button>
@@ -6572,7 +6744,7 @@ function App() {
                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', 
                   borderColor: '#dc2626',
                   fontWeight: '800',
-                  padding: '10px 20px',
+                  padding: '9px 18px',
                   borderRadius: '10px'
                 }}
               >
@@ -6584,7 +6756,7 @@ function App() {
       )}
 
       {/* ================================================================= */}
-      {/* MODAL: AGREGAR PRODUCTO */}
+      {/* MODAL: AGREGAR PRODUCTO (DISEÑO COMPACTO Y RESPONSIVO) */}
       {/* ================================================================= */}
       {showAddProductModal && (
         <div className="modal-overlay" onClick={() => setShowAddProductModal(false)}>
@@ -6592,29 +6764,39 @@ function App() {
             className="modal-card animate-fade-in" 
             onSubmit={handleCreateProduct}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '540px', width: '92%', borderRadius: '20px', overflow: 'hidden' }}
+            style={{ 
+              maxWidth: '560px', 
+              width: '94%', 
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: '20px', 
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)'
+            }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Header */}
+            <div className="modal-header" style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '12px',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
                   background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '20px',
-                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.35)'
+                  fontSize: '18px',
+                  boxShadow: '0 3px 8px rgba(220, 38, 38, 0.3)'
                 }}>
                   🥩
                 </div>
                 <div>
-                  <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                  <h3 className="modal-title" style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
                     Agregar Nuevo Producto / Corte
                   </h3>
-                  <p style={{ fontSize: '12.5px', color: '#64748b', margin: '3px 0 0 0' }}>
+                  <p style={{ fontSize: '11.5px', color: '#64748b', margin: '2px 0 0 0' }}>
                     Crea un nuevo corte para el inventario y tienda virtual
                   </p>
                 </div>
@@ -6625,10 +6807,10 @@ function App() {
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
-                  width: '32px',
-                  height: '32px',
+                  width: '28px', 
+                  height: '28px', 
                   borderRadius: '50%', 
-                  fontSize: '14px', 
+                  fontSize: '13px', 
                   cursor: 'pointer', 
                   color: '#475569',
                   display: 'flex',
@@ -6640,9 +6822,11 @@ function App() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Body */}
+            <div className="modal-body" style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '11px', overflowY: 'auto', maxHeight: 'calc(92vh - 118px)' }}>
+              {/* Nombre */}
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
                   Nombre del Corte / Producto *
                 </label>
                 <input 
@@ -6652,123 +6836,127 @@ function App() {
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
                   required
-                  style={{ fontSize: '14px', padding: '0 14px', height: '44px' }}
+                  style={{ fontSize: '13.5px', padding: '0 12px', height: '38px' }}
                 />
               </div>
 
-              {/* Product Photo Upload Section */}
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Foto del Corte / Producto</span>
-                  {uploadingProdFoto && <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: '700' }}>⏳ Subiendo imagen a Cloudinary...</span>}
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px' }}>
-                  <div style={{
-                    width: '74px',
-                    height: '74px',
-                    borderRadius: '12px',
-                    border: '2px dashed #cbd5e1',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    flexShrink: 0
-                  }}>
-                    {newProdFoto ? (
-                      <img src={newProdFoto} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ fontSize: '24px' }}>🥩</span>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexGrow: 1 }}>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <label 
-                        className="btn btn-secondary" 
-                        style={{ 
-                          padding: '7px 12px', 
-                          fontSize: '12px', 
-                          cursor: 'pointer', 
-                          display: 'inline-flex', 
-                          alignItems: 'center', 
-                          gap: '6px',
-                          borderRadius: '8px',
-                          fontWeight: '700'
-                        }}
-                      >
-                        <span>📷</span> Seleccionar Foto
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          style={{ display: 'none' }} 
-                          onChange={handleProductFotoChange}
-                        />
-                      </label>
-                      {newProdFoto && (
-                        <button 
-                          type="button" 
-                          className="btn btn-danger" 
-                          style={{ padding: '7px 10px', fontSize: '11.5px', borderRadius: '8px' }}
-                          onClick={() => setNewProdFoto('')}
-                        >
-                          ✕ Quitar
-                        </button>
+              {/* Fila 2: Foto y Unidad de Medida (2 Columnas) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: '12px', alignItems: 'start' }}>
+                {/* Foto */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Foto del Corte</span>
+                    {uploadingProdFoto && <span style={{ fontSize: '10px', color: '#2563eb' }}>Subiendo...</span>}
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '10px',
+                      border: '1.5px dashed #cbd5e1',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0
+                    }}>
+                      {newProdFoto ? (
+                        <img src={newProdFoto} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '18px' }}>🥩</span>
                       )}
                     </div>
-                    <input 
-                      type="text" 
-                      className="input-control" 
-                      placeholder="O pega enlace web (https://...)" 
-                      value={newProdFoto.startsWith('data:') ? '' : newProdFoto}
-                      onChange={(e) => setNewProdFoto(e.target.value)}
-                      style={{ fontSize: '11.5px', height: '32px', padding: '0 10px' }}
-                    />
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1 }}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <label 
+                          className="btn btn-secondary" 
+                          style={{ 
+                            padding: '4px 8px', 
+                            fontSize: '11px', 
+                            cursor: 'pointer', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            borderRadius: '6px',
+                            fontWeight: '700',
+                            flex: 1,
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <span>📷</span> Foto
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }} 
+                            onChange={handleProductFotoChange}
+                          />
+                        </label>
+                        {newProdFoto && (
+                          <button 
+                            type="button" 
+                            className="btn btn-danger" 
+                            style={{ padding: '4px 6px', fontSize: '10.5px', borderRadius: '6px' }}
+                            onClick={() => setNewProdFoto('')}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <input 
+                        type="text" 
+                        className="input-control" 
+                        placeholder="O pega URL (https://...)" 
+                        value={newProdFoto.startsWith('data:') ? '' : newProdFoto}
+                        onChange={(e) => setNewProdFoto(e.target.value)}
+                        style={{ fontSize: '10.5px', height: '24px', padding: '0 6px' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Unidad de Medida */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
+                    Unidad de Medida *
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {[
+                      { id: 'kg', label: '🥩 kg', sub: 'Kilo' },
+                      { id: 'lb', label: '⚖️ lb', sub: 'Libra' },
+                      { id: 'und', label: '📦 und', sub: 'Unidad' }
+                    ].map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setNewProdUnit(u.id)}
+                        style={{
+                          padding: '6px 2px',
+                          borderRadius: '8px',
+                          border: newProdUnit === u.id ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                          background: newProdUnit === u.id ? '#fef2f2' : '#ffffff',
+                          color: newProdUnit === u.id ? '#991b1b' : '#334155',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '1px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <strong style={{ fontSize: '11.5px' }}>{u.label}</strong>
+                        <span style={{ fontSize: '9px', color: '#64748b' }}>{u.sub}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* Unit of Measure Selector */}
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                  Tipo de Unidad de Medida *
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' }}>
-                  {[
-                    { id: 'kg', label: '🥩 Kilogramos (kg)', desc: 'Carne pesada por kilo' },
-                    { id: 'lb', label: '⚖️ Libras (lb)', desc: 'Carne pesada por libra' },
-                    { id: 'und', label: '📦 Unidades (und)', desc: 'Chorizos, arepas, hamburguesas' }
-                  ].map(u => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => setNewProdUnit(u.id)}
-                      style={{
-                        padding: '10px 8px',
-                        borderRadius: '12px',
-                        border: newProdUnit === u.id ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                        background: newProdUnit === u.id ? '#fef2f2' : '#ffffff',
-                        color: newProdUnit === u.id ? '#991b1b' : '#334155',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        boxShadow: newProdUnit === u.id ? '0 2px 8px rgba(220, 38, 38, 0.2)' : 'none'
-                      }}
-                    >
-                      <strong style={{ fontSize: '12px' }}>{u.label}</strong>
-                      <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{u.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              {/* Fila 3: Categoría y Precio (2 Columnas) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
                     Categoría *
                   </label>
                   <select 
@@ -6780,7 +6968,7 @@ function App() {
                         setNewProdUnit('und')
                       }
                     }}
-                    style={{ fontSize: '13px', fontWeight: '600' }}
+                    style={{ fontSize: '12.5px', fontWeight: '600', height: '38px' }}
                   >
                     {['Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -6789,7 +6977,7 @@ function App() {
                 </div>
                 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
                     Precio Venta ($ {getPriceUnitLabel(newProdUnit)}) *
                   </label>
                   <input 
@@ -6799,13 +6987,14 @@ function App() {
                     value={formatNumberWithDots(newProdPrice)}
                     onChange={(e) => setNewProdPrice(parseFormattedNumber(e.target.value))}
                     required
-                    style={{ fontSize: '15px', fontWeight: '800', padding: '0 14px', height: '44px', color: '#dc2626' }}
+                    style={{ fontSize: '14.5px', fontWeight: '800', padding: '0 12px', height: '38px', color: '#dc2626' }}
                   />
                 </div>
               </div>
 
+              {/* Fila 4: Descripción Breve */}
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
                   Descripción Breve
                 </label>
                 <textarea 
@@ -6813,13 +7002,14 @@ function App() {
                   placeholder="Ej. Corte suave y jugoso, ideal para asados y parrilla..." 
                   value={newProdDesc}
                   onChange={(e) => setNewProdDesc(e.target.value)}
-                  style={{ minHeight: '60px', fontFamily: 'inherit', resize: 'vertical', fontSize: '13.5px', padding: '10px 14px' }}
+                  style={{ minHeight: '38px', height: '38px', fontFamily: 'inherit', resize: 'vertical', fontSize: '12px', padding: '6px 10px', lineHeight: 1.3 }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              {/* Fila 5: Stock Inicial y Límite Mínimo (2 Columnas) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
                     Stock Inicial ({newProdUnit === 'und' ? 'unidades' : newProdUnit === 'lb' ? 'lb' : 'kg'}) *
                   </label>
                   <input 
@@ -6830,13 +7020,13 @@ function App() {
                     placeholder={newProdUnit === 'und' ? 'Ej. 20' : 'Ej. 40'} 
                     value={newProdStock || ''}
                     onChange={(e) => setNewProdStock(newProdUnit === 'und' ? Math.round(Number(e.target.value)) : Number(e.target.value))}
-                    style={{ fontSize: '14px', fontWeight: '700', padding: '0 14px', height: '44px' }}
+                    style={{ fontSize: '13px', fontWeight: '700', padding: '0 12px', height: '38px' }}
                   />
                 </div>
                 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                    Límite Mínimo Alerta ({newProdUnit === 'und' ? 'unidades' : newProdUnit === 'lb' ? 'lb' : 'kg'})
+                  <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
+                    Límite Mínimo ({newProdUnit === 'und' ? 'unidades' : newProdUnit === 'lb' ? 'lb' : 'kg'})
                   </label>
                   <input 
                     type="number" 
@@ -6845,15 +7035,28 @@ function App() {
                     className="input-control" 
                     value={newProdLimitMin || ''}
                     onChange={(e) => setNewProdLimitMin(newProdUnit === 'und' ? Math.round(Number(e.target.value)) : Number(e.target.value))}
-                    style={{ fontSize: '14px', fontWeight: '700', padding: '0 14px', height: '44px' }}
+                    style={{ fontSize: '13px', fontWeight: '700', padding: '0 12px', height: '38px' }}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddProductModal(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary">✓ Crear Producto</button>
+            {/* Footer */}
+            <div className="modal-footer" style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowAddProductModal(false)} style={{ padding: '8px 16px', fontSize: '12.5px' }}>Cancelar</button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                style={{ 
+                  padding: '8px 20px', 
+                  fontSize: '12.5px', 
+                  fontWeight: '800', 
+                  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', 
+                  boxShadow: '0 3px 10px rgba(220, 38, 38, 0.3)' 
+                }}
+              >
+                ✓ Guardar Producto
+              </button>
             </div>
           </form>
         </div>
