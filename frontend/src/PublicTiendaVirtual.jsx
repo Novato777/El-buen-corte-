@@ -20,6 +20,17 @@ import {
   InstagramIcon,
   FacebookIcon
 } from './Icons'
+import { 
+  normalizeUnit, 
+  isWeightUnit, 
+  convertQuantity, 
+  calculateStockDeduction, 
+  calculateUnitPriceForSoldUnit, 
+  formatStockDisplay, 
+  getUnitLabel, 
+  getPriceUnitLabel,
+  getAllowedSellUnits
+} from './utils/units'
 
 // Helper for formatting currencies in Colombian Pesos
 const formatCOP = (val) => {
@@ -380,6 +391,7 @@ export default function PublicTiendaVirtual() {
     const originalPrice = Number(product.precioVenta)
     const discount = Number(product.descuento) || 0
     const effectivePrice = discount > 0 ? (originalPrice * (1 - discount / 100)) : originalPrice
+    const unitMed = normalizeUnit(product.unidadMedida || 'kg')
 
     setCart((prevCart) => {
       const existingIndex = prevCart.findIndex(item => item.id === product.id)
@@ -393,7 +405,8 @@ export default function PublicTiendaVirtual() {
           stockMax: realStock,
           precioVenta: effectivePrice,
           precioOriginal: originalPrice,
-          descuento: discount
+          descuento: discount,
+          unidadMedida: unitMed
         }
         return updated
       } else {
@@ -404,6 +417,7 @@ export default function PublicTiendaVirtual() {
           precioVenta: effectivePrice,
           precioOriginal: originalPrice,
           descuento: discount,
+          unidadMedida: unitMed,
           foto: product.foto || '',
           categoria: product.categoria || 'Carnes',
           cantidad: initialQty,
@@ -459,10 +473,12 @@ export default function PublicTiendaVirtual() {
     const notes = clientData.notas?.trim()
     const orderCode = orderData?.id ? `#${orderData.id}` : 'PENDIENTE'
 
-    // Formatear cada producto con icono cárnico, cantidad, nombre y subtotal
+    // Formatear cada producto con icono cárnico, cantidad, unidad, nombre y subtotal
     const productsFormatted = itemsList.map(item => {
       const subtotal = item.precioVenta * item.cantidad
-      return `🥩 *${item.cantidad} x ${item.nombre}*\n   └ Subtotal: *${formatCOP(subtotal)}*`
+      const uLabel = getUnitLabel(item.unidadMedida)
+      const qtyStr = item.unidadMedida === 'und' ? `${item.cantidad} und` : `${item.cantidad} ${uLabel}`
+      return `🥩 *${qtyStr} de ${item.nombre}*\n   └ Subtotal: *${formatCOP(subtotal)}*`
     }).join('\n\n')
 
     // Construcción del mensaje elegante, estructurado y con emoticones de alto impacto
@@ -507,29 +523,32 @@ export default function PublicTiendaVirtual() {
       return
     }
 
+    const orderPayload = {
+      cliente: checkoutForm.cliente.trim(),
+      telefono: checkoutForm.telefono.trim(),
+      direccion: checkoutForm.direccion.trim(),
+      metodoPago: checkoutForm.metodoPago,
+      notas: checkoutForm.notas.trim(),
+      items: cart.map(item => ({
+        productoId: item.id,
+        nombre: item.nombre,
+        cantidad: item.cantidad,
+        unidad: item.unidadMedida || 'kg',
+        precio: item.precioVenta
+      }))
+    }
+
     // Re-validate current stock
     for (const item of cart) {
       const prod = productos.find(i => i.id === item.id)
       if (!prod || Number(prod.stock) < item.cantidad) {
-        setCheckoutError(`El producto "${item.nombre}" no cuenta con suficiente stock (${prod ? prod.stock : 0} kg disponibles). Por favor ajusta la cantidad en el carrito.`)
+        setCheckoutError(`El producto "${item.nombre}" no cuenta con suficiente stock (${prod ? formatStockDisplay(prod.stock, prod.unidadMedida) : '0 disponibles'}). Por favor ajusta la cantidad en el carrito.`)
         return
       }
     }
 
     setCheckoutSubmitting(true)
     setCheckoutError('')
-
-    const orderPayload = {
-      cliente: checkoutForm.cliente.trim(),
-      telefono: checkoutForm.telefono.trim(),
-      direccion: checkoutForm.direccion.trim() || 'Recoger en local',
-      metodoPago: checkoutForm.metodoPago || 'Efectivo',
-      notas: checkoutForm.notas.trim(),
-      items: cart.map(i => ({
-        productoId: i.id,
-        cantidad: i.cantidad
-      }))
-    }
 
     const currentCartSnapshot = [...cart]
     const currentTotalSnapshot = cartTotalPrice
@@ -799,7 +818,7 @@ export default function PublicTiendaVirtual() {
                           {currentSuggested.categoria || 'Carnes'}
                         </span>
                         <span className="badge badge-success" style={{ fontSize: '11px' }}>
-                          Stock: {currentSuggested.stock} kg
+                          Stock: {formatStockDisplay(currentSuggested.stock, currentSuggested.unidadMedida)}
                         </span>
                       </div>
 
@@ -825,14 +844,14 @@ export default function PublicTiendaVirtual() {
                               <span style={{ fontSize: '24px', fontWeight: '900', color: '#fca5a5' }}>
                                 {formatCOP(currentSuggested.precioVenta * (1 - currentSuggested.descuento / 100))}
                               </span>
-                              <span style={{ fontSize: '12px', opacity: 0.8 }}>/ kg</span>
+                              <span style={{ fontSize: '12px', opacity: 0.8 }}>{getPriceUnitLabel(currentSuggested.unidadMedida)}</span>
                               <span style={{ fontSize: '10.5px', background: '#dc2626', color: '#ffffff', fontWeight: '900', padding: '2px 7px', borderRadius: '6px' }}>
                                 🔥 {currentSuggested.descuento}% OFF
                               </span>
                             </div>
                           ) : (
                             <div>
-                              {formatCOP(currentSuggested.precioVenta)} <span>/ kg</span>
+                              {formatCOP(currentSuggested.precioVenta)} <span>{getPriceUnitLabel(currentSuggested.unidadMedida)}</span>
                             </div>
                           )}
                         </div>
@@ -860,7 +879,7 @@ export default function PublicTiendaVirtual() {
                               >
                                 -
                               </button>
-                              <span className="tienda-stepper-val">{inCartItem.cantidad} kg</span>
+                              <span className="tienda-stepper-val">{inCartItem.cantidad} {getUnitLabel(currentSuggested.unidadMedida)}</span>
                               <button 
                                 type="button" 
                                 className="tienda-stepper-btn"
@@ -881,7 +900,7 @@ export default function PublicTiendaVirtual() {
                               style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 18px', fontSize: '13.5px' }}
                             >
                               <ShoppingCartIcon style={{ width: 16, height: 16 }} />
-                              Agregar al Carrito
+                              Agregar
                             </button>
                           )}
                         </div>
@@ -1074,9 +1093,9 @@ export default function PublicTiendaVirtual() {
                       {isOutOfStock ? (
                         <span className="tienda-card-stock-tag tag-stock-out">Agotado</span>
                       ) : isLowStock ? (
-                        <span className="tienda-card-stock-tag tag-stock-low">¡Pocas unidades! ({product.stock} kg)</span>
+                        <span className="tienda-card-stock-tag tag-stock-low">¡Pocas unidades! ({formatStockDisplay(product.stock, product.unidadMedida)})</span>
                       ) : (
-                        <span className="tienda-card-stock-tag tag-stock-available">Stock: {product.stock} kg</span>
+                        <span className="tienda-card-stock-tag tag-stock-available">Stock: {formatStockDisplay(product.stock, product.unidadMedida)}</span>
                       )}
                     </div>
 
@@ -1103,12 +1122,12 @@ export default function PublicTiendaVirtual() {
                             <span style={{ color: '#dc2626', fontWeight: '900' }}>
                               {formatCOP(product.precioVenta * (1 - product.descuento / 100))}
                             </span>
-                            <span className="tienda-card-price-unit">/ kg</span>
+                            <span className="tienda-card-price-unit">{getPriceUnitLabel(product.unidadMedida)}</span>
                           </div>
                         ) : (
                           <div className="tienda-card-price">
                             {formatCOP(product.precioVenta)}
-                            <span className="tienda-card-price-unit">/ kg</span>
+                            <span className="tienda-card-price-unit">{getPriceUnitLabel(product.unidadMedida)}</span>
                           </div>
                         )}
                       </div>
@@ -1128,7 +1147,7 @@ export default function PublicTiendaVirtual() {
                           >
                             -
                           </button>
-                          <span className="tienda-stepper-val">{inCartItem.cantidad} kg en carrito</span>
+                          <span className="tienda-stepper-val">{inCartItem.cantidad} {getUnitLabel(product.unidadMedida)} en carrito</span>
                           <button
                             type="button"
                             className="tienda-stepper-btn"
@@ -1149,7 +1168,7 @@ export default function PublicTiendaVirtual() {
                           onClick={(e) => handleAddToCart(product, 1, e)}
                         >
                           <ShoppingCartIcon style={{ width: 16, height: 16 }} />
-                          Agregar al Carrito
+                          Agregar
                         </button>
                       )}
                     </div>
@@ -1643,7 +1662,7 @@ export default function PublicTiendaVirtual() {
                       </span>
                     )}
                     {Number(selectedProductDetail.stock) > 0 ? (
-                      <span className="badge badge-success">Disponible: {selectedProductDetail.stock} kg</span>
+                      <span className="badge badge-success">Disponible: {formatStockDisplay(selectedProductDetail.stock, selectedProductDetail.unidadMedida)}</span>
                     ) : (
                       <span className="badge badge-danger">Agotado</span>
                     )}
@@ -1657,11 +1676,11 @@ export default function PublicTiendaVirtual() {
                       <span style={{ fontSize: '26px', fontWeight: '900', color: '#dc2626' }}>
                         {formatCOP(selectedProductDetail.precioVenta * (1 - selectedProductDetail.descuento / 100))}
                       </span>
-                      <span style={{ fontSize: '13px', color: '#64748b' }}>/ kg</span>
+                      <span style={{ fontSize: '13px', color: '#64748b' }}>{getPriceUnitLabel(selectedProductDetail.unidadMedida)}</span>
                     </div>
                   ) : (
                     <div style={{ fontSize: '24px', fontWeight: '900', color: '#dc2626' }}>
-                      {formatCOP(selectedProductDetail.precioVenta)} <span style={{ fontSize: '13px', color: '#64748b' }}>/ kg</span>
+                      {formatCOP(selectedProductDetail.precioVenta)} <span style={{ fontSize: '13px', color: '#64748b' }}>{getPriceUnitLabel(selectedProductDetail.unidadMedida)}</span>
                     </div>
                   )}
 
@@ -1671,20 +1690,22 @@ export default function PublicTiendaVirtual() {
 
                   {Number(selectedProductDetail.stock) > 0 && (
                     <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <label className="form-label" style={{ fontSize: '12px' }}>Cantidad a agregar (kg):</label>
+                      <label className="form-label" style={{ fontSize: '12px' }}>
+                        Cantidad a agregar ({getUnitLabel(selectedProductDetail.unidadMedida)}):
+                      </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <input
                           type="number"
                           min="1"
                           max={Number(selectedProductDetail.stock)}
-                          step="any"
+                          step={normalizeUnit(selectedProductDetail.unidadMedida) === 'und' ? '1' : 'any'}
                           className="input-control"
                           value={detailModalQty}
                           onChange={(e) => setDetailModalQty(Math.max(1, Math.min(Number(selectedProductDetail.stock), Number(e.target.value))))}
                           style={{ width: '100px', fontWeight: '700' }}
                         />
                         <span style={{ fontSize: '13px', color: '#64748b' }}>
-                          Subtotal: <strong>{formatCOP(selectedProductDetail.precioVenta * (detailModalQty || 1))}</strong>
+                          Subtotal: <strong>{formatCOP((Number(selectedProductDetail.descuento) > 0 ? selectedProductDetail.precioVenta * (1 - selectedProductDetail.descuento / 100) : selectedProductDetail.precioVenta) * (detailModalQty || 1))}</strong>
                         </span>
                       </div>
 
@@ -1698,7 +1719,7 @@ export default function PublicTiendaVirtual() {
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
                       >
                         <ShoppingCartIcon style={{ width: 18, height: 18 }} />
-                        Agregar al Carrito ({detailModalQty || 1} kg)
+                        Agregar al Carrito ({detailModalQty || 1} {getUnitLabel(selectedProductDetail.unidadMedida)})
                       </button>
                     </div>
                   )}
@@ -1764,7 +1785,7 @@ export default function PublicTiendaVirtual() {
                 <div className="cart-item-details">
                   <div className="cart-item-title">{item.nombre}</div>
                   <div className="cart-item-price">
-                    {formatCOP(item.precioVenta)} / kg
+                    {formatCOP(item.precioVenta)} {getPriceUnitLabel(item.unidadMedida)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                     <div className="tienda-card-stepper" style={{ marginTop: 0, padding: '2px 6px', width: 'auto', gap: '6px' }}>
@@ -1776,7 +1797,9 @@ export default function PublicTiendaVirtual() {
                       >
                         -
                       </button>
-                      <span className="tienda-stepper-val" style={{ fontSize: '12px' }}>{item.cantidad} kg</span>
+                      <span className="tienda-stepper-val" style={{ fontSize: '12px' }}>
+                        {item.cantidad} {getUnitLabel(item.unidadMedida)}
+                      </span>
                       <button
                         type="button"
                         className="tienda-stepper-btn"

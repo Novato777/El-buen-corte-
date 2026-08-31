@@ -43,6 +43,19 @@ import {
   BellIcon
 } from './Icons'
 import PublicTiendaVirtual from './PublicTiendaVirtual'
+import { 
+  normalizeUnit, 
+  isWeightUnit, 
+  convertQuantity, 
+  calculateStockDeduction, 
+  calculateUnitPriceForSoldUnit, 
+  formatStockDisplay, 
+  getUnitLabel, 
+  getPriceUnitLabel,
+  getAllowedSellUnits,
+  KG_TO_LB,
+  LB_TO_KG
+} from './utils/units'
 
 // Helper for formatting currencies
 const formatCOP = (val) => {
@@ -497,6 +510,7 @@ function App() {
   const [posClientName, setPosClientName] = useState('Cliente Mostrador')
   const [posCashReceived, setPosCashReceived] = useState('')
   const [posSubmitting, setPosSubmitting] = useState(false)
+  const [posSelectedOrder, setPosSelectedOrder] = useState(null)
 
   // Descuentos en productos
   const [showDiscountModal, setShowDiscountModal] = useState(false)
@@ -512,6 +526,7 @@ function App() {
   const [newProdPrice, setNewProdPrice] = useState(0)
   const [newProdStock, setNewProdStock] = useState(0)
   const [newProdLimitMin, setNewProdLimitMin] = useState(10)
+  const [newProdUnit, setNewProdUnit] = useState('kg') // 'und' | 'kg' | 'lb'
   const [uploadingProdFoto, setUploadingProdFoto] = useState(false)
 
   const handleProductFotoChange = (e) => {
@@ -1122,7 +1137,8 @@ function App() {
       foto: newProdFoto || 'https://images.unsplash.com/photo-1603048588665-791ca8aea617?w=300',
       precioVenta: Number(newProdPrice),
       stock: Number(newProdStock),
-      limiteMin: Number(newProdLimitMin)
+      limiteMin: Number(newProdLimitMin),
+      unidadMedida: normalizeUnit(newProdUnit)
     }
 
     try {
@@ -1154,6 +1170,7 @@ function App() {
     setNewProdPrice(0)
     setNewProdStock(0)
     setNewProdLimitMin(10)
+    setNewProdUnit('kg')
     setShowAddProductModal(false)
   }
 
@@ -1255,6 +1272,15 @@ function App() {
   }
 
   // Delivery & Cobro handling
+  const handleOpenChargeOrderModal = (order) => {
+    setPosSelectedOrder(order)
+    setNewIncomePaymentMethod(order.metodoPago === 'Transferencia' ? 'Transferencia' : 'Efectivo')
+    setPosClientName(order.cliente || 'Cliente')
+    setPosCashReceived('')
+    setIncomeMode('pos')
+    setShowAddIncomeModal(true)
+  }
+
   const handleDeliverOrder = async (orderId, paymentMethod = 'Efectivo') => {
     setChargeLoading(true)
     try {
@@ -1268,7 +1294,9 @@ function App() {
       })
       if (!res.ok) throw new Error('Error al registrar cobro y entrega del pedido')
       await loadData()
+      setPosSelectedOrder(null)
       setOrderToCharge(null)
+      setShowAddIncomeModal(false)
       alert(`✅ ¡Pedido ${orderId} cobrado (${paymentMethod}) y entregado exitosamente!\n\nLa venta se registró como Ingreso en Contabilidad y se actualizó el saldo de caja.`)
     } catch (err) {
       console.warn('Error al actualizar pedido en backend, aplicando cambios localmente:', err)
@@ -1289,7 +1317,9 @@ function App() {
         return p
       })
       setPedidos(updatedPedidos)
+      setPosSelectedOrder(null)
       setOrderToCharge(null)
+      setShowAddIncomeModal(false)
       alert(`✅ ¡Pedido ${orderId} cobrado (${paymentMethod}) y entregado (Modo local)!`)
     } finally {
       setChargeLoading(false)
@@ -1475,37 +1505,43 @@ function App() {
       return
     }
 
+    const baseUnit = normalizeUnit(prod.unidadMedida || 'kg')
     const numQty = parseFloat(posQty)
     if (isNaN(numQty) || numQty <= 0) {
       alert('⚠️ Por favor ingresa una cantidad válida mayor a 0.')
       return
     }
-
-    // Stock deduction calculation in base units (kg / und)
-    const stockDeduct = posUnit === 'lb' ? numQty * 0.5 : numQty
-
-    // Check currently added in cart for this product
-    const existingInCart = posCart.find(item => String(item.productoId) === String(prod.id))
-    const currentInCartStock = existingInCart ? (existingInCart.unidad === 'lb' ? existingInCart.cantidad * 0.5 : existingInCart.cantidad) : 0
-    const totalRequiredStock = currentInCartStock + stockDeduct
-
-    if (totalRequiredStock > Number(prod.stock)) {
-      alert(`❌ Stock insuficiente para "${prod.nombre}".\n\n• Stock disponible: ${Number(prod.stock).toFixed(2)} kg/und\n• Ya agregado a la venta: ${currentInCartStock.toFixed(2)}\n• Intentas agregar: ${stockDeduct.toFixed(2)}`)
+    if (baseUnit === 'und' && (!Number.isInteger(numQty) || numQty < 1)) {
+      alert('⚠️ Los productos por unidad solo se pueden vender en cantidades enteras (ej. 1, 2, 3...).')
       return
     }
 
-    // Calculate item subtotal with discount applied if available
-    const effectiveBasePrice = Number(prod.descuento) > 0 
-      ? (Number(prod.precioVenta) * (1 - Number(prod.descuento) / 100)) 
-      : Number(prod.precioVenta)
-    const unitPrice = posUnit === 'lb' ? (effectiveBasePrice / 2) : effectiveBasePrice
+    // Stock deduction calculation in base units of the product
+    const stockDeduct = calculateStockDeduction(numQty, posUnit, baseUnit)
+
+    // Check currently added in cart for this product in base units
+    const existingInCartItems = posCart.filter(item => String(item.productoId) === String(prod.id))
+    const currentInCartStock = existingInCartItems.reduce((sum, item) => sum + calculateStockDeduction(item.cantidad, item.unidad, baseUnit), 0)
+    const totalRequiredStock = currentInCartStock + stockDeduct
+
+    if (totalRequiredStock > Number(prod.stock)) {
+      alert(`❌ Stock insuficiente para "${prod.nombre}".\n\n• Stock disponible: ${formatStockDisplay(prod.stock, baseUnit)}\n• Ya agregado a la venta: ${formatStockDisplay(currentInCartStock, baseUnit)}\n• Intentas agregar: ${numQty} ${posUnit} (${formatStockDisplay(stockDeduct, baseUnit)})`)
+      return
+    }
+
+    // Calculate item unit price and subtotal
+    const unitPrice = calculateUnitPriceForSoldUnit(prod, posUnit)
     const subtotal = numQty * unitPrice
 
-    if (existingInCart && existingInCart.unidad === posUnit) {
+    const existingSameUnitIndex = posCart.findIndex(item => String(item.productoId) === String(prod.id) && item.unidad === posUnit)
+
+    if (existingSameUnitIndex > -1) {
       // Update existing item in cart
-      setPosCart(posCart.map(item => {
-        if (String(item.productoId) === String(prod.id) && item.unidad === posUnit) {
-          const updatedQty = Number((item.cantidad + numQty).toFixed(2))
+      setPosCart(posCart.map((item, idx) => {
+        if (idx === existingSameUnitIndex) {
+          const updatedQty = baseUnit === 'und' 
+            ? Math.round(item.cantidad + numQty) 
+            : Number((item.cantidad + numQty).toFixed(3))
           return {
             ...item,
             cantidad: updatedQty,
@@ -1523,7 +1559,8 @@ function App() {
         cantidad: numQty,
         unidad: posUnit,
         precioUnitario: unitPrice,
-        precioBaseKg: Number(prod.precioVenta),
+        precioBase: Number(prod.precioVenta),
+        baseUnit: baseUnit,
         descuento: Number(prod.descuento) || 0,
         subtotal: subtotal
       }
@@ -1553,7 +1590,7 @@ function App() {
     const itemsPayload = posCart.map(item => ({
       productoId: item.productoId,
       nombre: item.nombre,
-      cantidad: item.unidad === 'lb' ? item.cantidad * 0.5 : item.cantidad,
+      cantidad: item.cantidad,
       unidad: item.unidad,
       precio: item.precioUnitario
     }))
@@ -1591,10 +1628,11 @@ function App() {
       console.warn('Error backend venta POS, aplicando fallback local:', err)
       // Local fallback
       setInventario(prev => prev.map(prod => {
-        const cartItem = posCart.find(ci => String(ci.productoId) === String(prod.id))
-        if (cartItem) {
-          const deduct = cartItem.unidad === 'lb' ? cartItem.cantidad * 0.5 : cartItem.cantidad
-          return { ...prod, stock: Math.max(0, prod.stock - deduct) }
+        const cartItemsForProd = posCart.filter(ci => String(ci.productoId) === String(prod.id))
+        if (cartItemsForProd.length > 0) {
+          const baseUnit = normalizeUnit(prod.unidadMedida || 'kg')
+          const totalDeduct = cartItemsForProd.reduce((sum, item) => sum + calculateStockDeduction(item.cantidad, item.unidad, baseUnit), 0)
+          return { ...prod, stock: Math.max(0, prod.stock - totalDeduct) }
         }
         return prod
       }))
@@ -2773,11 +2811,24 @@ function App() {
                               </span>
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                                 <button 
                                   type="button"
-                                  className="btn btn-secondary" 
-                                  style={{ padding: '6px 12px', fontSize: '12px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '5px' }} 
+                                  style={{ 
+                                    padding: '5px 12px', 
+                                    fontSize: '11.5px', 
+                                    fontWeight: '700', 
+                                    borderRadius: '20px',
+                                    background: '#f8fafc',
+                                    border: '1px solid #cbd5e1',
+                                    color: '#334155',
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '5px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                  }} 
                                   onClick={() => setSelectedOrderDetail(p)}
                                   title="Ver qué pidió el cliente para preparar y despachar"
                                 >
@@ -2787,20 +2838,42 @@ function App() {
                                   <>
                                     <button 
                                       type="button"
-                                      className="btn btn-primary" 
-                                      style={{ padding: '6px 12px', fontSize: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#059669', color: '#ffffff', fontWeight: '700' }} 
-                                      onClick={() => {
-                                        setOrderToCharge(p)
-                                        setChargePaymentMethod('Efectivo')
-                                      }}
+                                      style={{ 
+                                        padding: '5px 14px', 
+                                        fontSize: '11.5px', 
+                                        fontWeight: '700',
+                                        borderRadius: '20px',
+                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                                        border: 'none', 
+                                        color: '#ffffff', 
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease',
+                                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.28)'
+                                      }} 
+                                      onClick={() => handleOpenChargeOrderModal(p)}
                                       title="Cobrar pedido y registrar venta en contabilidad"
                                     >
                                       💳 Cobrar & Entregar
                                     </button>
                                     <button 
                                       type="button"
-                                      className="btn btn-danger" 
-                                      style={{ padding: '6px 12px', fontSize: '12px' }} 
+                                      style={{ 
+                                        padding: '5px 11px', 
+                                        fontSize: '11.5px',
+                                        fontWeight: '700',
+                                        borderRadius: '20px',
+                                        background: '#fef2f2',
+                                        border: '1px solid #fecaca',
+                                        color: '#dc2626',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }} 
                                       onClick={() => handleCancelOrder(p.id)}
                                     >
                                       Cancelar
@@ -2808,13 +2881,13 @@ function App() {
                                   </>
                                 )}
                                 {p.estado === 'Entregado' && (
-                                  <span style={{ color: 'var(--accent-green)', fontSize: '12px', fontWeight: '600' }}>
-                                    Pagado en caja
+                                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#059669', background: '#ecfdf5', padding: '4px 10px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
+                                    ✓ Pagado en caja
                                   </span>
                                 )}
                                 {p.estado === 'Cancelado' && (
-                                  <span style={{ color: 'var(--accent-red)', fontSize: '12px', fontWeight: '600' }}>
-                                    Pedido anulado
+                                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+                                    ✕ Pedido anulado
                                   </span>
                                 )}
                               </div>
@@ -2972,7 +3045,9 @@ function App() {
 
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
                                 <div>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Precio / kg</div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>
+                                    Precio {getPriceUnitLabel(item.unidadMedida)}
+                                  </div>
                                   {hasDiscount ? (
                                     <div>
                                       <span style={{ fontSize: '11.5px', color: '#94a3b8', textDecoration: 'line-through', marginRight: '6px' }}>
@@ -2998,7 +3073,7 @@ function App() {
                                       color: isLow ? 'var(--accent-red)' : 'var(--accent-green)' 
                                     }}
                                   >
-                                    {item.stock.toFixed(1)} kg
+                                    {formatStockDisplay(item.stock, item.unidadMedida)}
                                     {isLow && <span style={{ display: 'block', fontSize: '9px', color: 'var(--accent-red)' }}>⚠️ Crítico</span>}
                                   </div>
                                 </div>
@@ -4718,12 +4793,30 @@ function App() {
                               <span style={{ fontSize: '48px' }}>🥩</span>
                             )}
 
+                            {Number(product.descuento) > 0 && (
+                              <span style={{
+                                position: 'absolute',
+                                top: '10px',
+                                left: '10px',
+                                background: '#dc2626',
+                                color: '#ffffff',
+                                fontWeight: '900',
+                                fontSize: '11px',
+                                padding: '3px 7px',
+                                borderRadius: '7px',
+                                zIndex: 2,
+                                boxShadow: '0 2px 8px rgba(220, 38, 38, 0.4)'
+                              }}>
+                                🔥 {product.descuento}% OFF
+                              </span>
+                            )}
+
                             {isOutOfStock ? (
                               <span className="tienda-card-stock-tag tag-stock-out">Agotado</span>
                             ) : isLowStock ? (
-                              <span className="tienda-card-stock-tag tag-stock-low">¡Pocas unidades! ({product.stock} kg)</span>
+                              <span className="tienda-card-stock-tag tag-stock-low">¡Pocas unidades! ({formatStockDisplay(product.stock, product.unidadMedida)})</span>
                             ) : (
-                              <span className="tienda-card-stock-tag tag-stock-available">Stock: {product.stock} kg</span>
+                              <span className="tienda-card-stock-tag tag-stock-available">Stock: {formatStockDisplay(product.stock, product.unidadMedida)}</span>
                             )}
                           </div>
 
@@ -4742,10 +4835,22 @@ function App() {
                             </p>
 
                             <div className="tienda-card-price-row">
-                              <div className="tienda-card-price">
-                                {formatCOP(product.precioVenta)}
-                                <span className="tienda-card-price-unit">/ kg</span>
-                              </div>
+                              {Number(product.descuento) > 0 ? (
+                                <div className="tienda-card-price" style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                                  <span style={{ fontSize: '11.5px', color: '#94a3b8', textDecoration: 'line-through' }}>
+                                    {formatCOP(product.precioVenta)}
+                                  </span>
+                                  <span style={{ color: '#dc2626', fontWeight: '900' }}>
+                                    {formatCOP(product.precioVenta * (1 - product.descuento / 100))}
+                                  </span>
+                                  <span className="tienda-card-price-unit">{getPriceUnitLabel(product.unidadMedida)}</span>
+                                </div>
+                              ) : (
+                                <div className="tienda-card-price">
+                                  {formatCOP(product.precioVenta)}
+                                  <span className="tienda-card-price-unit">{getPriceUnitLabel(product.unidadMedida)}</span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Botón o Stepper de Carrito */}
@@ -4763,7 +4868,7 @@ function App() {
                                 >
                                   -
                                 </button>
-                                <span className="tienda-stepper-val">{inCartItem.cantidad} kg en carrito</span>
+                                <span className="tienda-stepper-val">{inCartItem.cantidad} {getUnitLabel(product.unidadMedida)} en carrito</span>
                                 <button
                                   type="button"
                                   className="tienda-stepper-btn"
@@ -5144,31 +5249,39 @@ function App() {
                   style={{ fontSize: '13.5px', fontWeight: '600' }}
                 >
                   {inventario.map(i => (
-                    <option key={i.id} value={i.id}>{i.nombre} — (Stock actual: {i.stock} kg)</option>
+                    <option key={i.id} value={i.id}>{i.nombre} — (Stock actual: {formatStockDisplay(i.stock, i.unidadMedida)})</option>
                   ))}
                 </select>
               </div>
 
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                  Cantidad a Añadir (kg) *
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type="number" 
-                    step="any"
-                    min="0.1"
-                    className="input-control" 
-                    value={newStockWeight}
-                    onChange={(e) => setNewStockWeight(e.target.value)}
-                    required
-                    style={{ fontSize: '15px', fontWeight: '700', padding: '0 32px 0 14px', height: '44px' }}
-                  />
-                  <span style={{ position: 'absolute', right: '12px', fontSize: '12px', color: '#64748b', fontWeight: '700', pointerEvents: 'none' }}>
-                    kg
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const curProd = inventario.find(i => String(i.id) === String(newStockProduct)) || inventario[0]
+                const u = normalizeUnit(curProd?.unidadMedida)
+                const isUnd = u === 'und'
+
+                return (
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                      Cantidad a Añadir ({isUnd ? 'unidades' : u}) *
+                    </label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input 
+                        type="number" 
+                        step={isUnd ? '1' : 'any'}
+                        min={isUnd ? '1' : '0.1'}
+                        className="input-control" 
+                        value={newStockWeight}
+                        onChange={(e) => setNewStockWeight(isUnd ? Math.round(Number(e.target.value)) : e.target.value)}
+                        required
+                        style={{ fontSize: '15px', fontWeight: '700', padding: '0 45px 0 14px', height: '44px' }}
+                      />
+                      <span style={{ position: 'absolute', right: '12px', fontSize: '12px', color: '#64748b', fontWeight: '700', pointerEvents: 'none' }}>
+                        {getUnitLabel(u)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <span style={{ fontSize: '18px' }}>💡</span>
@@ -5457,14 +5570,14 @@ function App() {
       )}
 
       {/* ================================================================= */}
-      {/* 🥩🛒 MODAL: REGISTRAR VENTA (POS) / INGRESO A CAJA */}
+      {/* 🥩🛒 MODAL UNIFICADO: REGISTRAR VENTA (POS) / COBRO DE PEDIDO / INGRESO */}
       {/* ================================================================= */}
       {showAddIncomeModal && (
-        <div className="modal-overlay" onClick={() => !posSubmitting && setShowAddIncomeModal(false)}>
+        <div className="modal-overlay" onClick={() => !posSubmitting && !chargeLoading && { setShowAddIncomeModal: () => { setShowAddIncomeModal(false); setPosSelectedOrder(null); } }.setShowAddIncomeModal()}>
           <div 
             className="modal-card animate-fade-in" 
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '680px', width: '95%', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
+            style={{ maxWidth: posSelectedOrder ? '560px' : '680px', width: '95%', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
           >
             {/* Modal Header */}
             <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -5473,30 +5586,34 @@ function App() {
                   width: '42px',
                   height: '42px',
                   borderRadius: '12px',
-                  background: incomeMode === 'pos' ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  background: posSelectedOrder 
+                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
+                    : (incomeMode === 'pos' ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'),
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '22px',
-                  boxShadow: incomeMode === 'pos' ? '0 4px 12px rgba(220, 38, 38, 0.35)' : '0 4px 12px rgba(16, 185, 129, 0.35)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
                   transition: 'all 0.3s ease'
                 }}>
-                  {incomeMode === 'pos' ? '🥩' : '💰'}
+                  {posSelectedOrder ? '💳' : (incomeMode === 'pos' ? '🥩' : '💰')}
                 </div>
                 <div>
                   <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '900', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
-                    {incomeMode === 'pos' ? 'Punto de Venta / Registrar Venta' : 'Registrar Ingreso Adicional'}
+                    {posSelectedOrder ? `Cobrar y Entregar Pedido #${posSelectedOrder.id}` : (incomeMode === 'pos' ? 'Punto de Venta / Registrar Venta' : 'Registrar Ingreso Adicional')}
                   </h3>
                   <p style={{ fontSize: '12px', color: '#64748b', margin: '3px 0 0 0' }}>
-                    {incomeMode === 'pos' ? 'Selecciona productos, calcula totales y descuenta inventario automáticamente' : 'Entradas de dinero extraordinarias, aportes o ajustes'}
+                    {posSelectedOrder 
+                      ? `Cliente: ${posSelectedOrder.cliente} • Fecha: ${posSelectedOrder.fecha}` 
+                      : (incomeMode === 'pos' ? 'Selecciona productos, calcula totales y descuenta inventario automáticamente' : 'Entradas de dinero extraordinarias, aportes o ajustes')}
                   </p>
                 </div>
               </div>
               <button 
                 type="button" 
-                onClick={() => setShowAddIncomeModal(false)}
-                disabled={posSubmitting}
+                onClick={() => { setShowAddIncomeModal(false); setPosSelectedOrder(null); }}
+                disabled={posSubmitting || chargeLoading}
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
@@ -5515,399 +5632,79 @@ function App() {
               </button>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '6px 20px', gap: '8px', borderBottom: '1px solid #e2e8f0' }}>
-              <button
-                type="button"
-                onClick={() => setIncomeMode('pos')}
-                style={{
-                  padding: '9px 14px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: incomeMode === 'pos' ? '#ffffff' : 'transparent',
-                  color: incomeMode === 'pos' ? '#dc2626' : '#64748b',
-                  fontWeight: '800',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  boxShadow: incomeMode === 'pos' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <span>🛒</span> Venta de Mostrador (POS)
-              </button>
-              <button
-                type="button"
-                onClick={() => setIncomeMode('manual')}
-                style={{
-                  padding: '9px 14px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: incomeMode === 'manual' ? '#ffffff' : 'transparent',
-                  color: incomeMode === 'manual' ? '#059669' : '#64748b',
-                  fontWeight: '800',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  boxShadow: incomeMode === 'manual' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <span>💵</span> Ingreso Libre / Ajuste
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            {incomeMode === 'pos' ? (
-              <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '78vh', overflowY: 'auto' }}>
-                
-                {/* 1. SELECCIÓN DE PRODUCTO Y CANTIDAD */}
-                <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* CASO A: COBRO Y ENTREGA DE PEDIDO DESDE GESTIÓN DE PEDIDOS */}
+            {posSelectedOrder ? (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '75vh', overflowY: 'auto' }}>
                   
-                  {/* Category Filter Pills */}
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px', display: 'block', marginBottom: '6px' }}>
-                      1. Filtrar por Categoría:
-                    </label>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {['Todas', 'Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => {
-                            setPosCategory(cat)
-                            const prodsInCat = inventario.filter(i => cat === 'Todas' || i.categoria === cat)
-                            if (prodsInCat.length > 0) {
-                              setPosSelectedProdId(String(prodsInCat[0].id))
-                              if (cat === 'Embutidos') setPosUnit('und')
-                              else setPosUnit('kg')
-                            }
-                          }}
-                          style={{
-                            padding: '4px 10px',
-                            borderRadius: '8px',
-                            border: posCategory === cat ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
-                            background: posCategory === cat ? '#fee2e2' : '#ffffff',
-                            color: posCategory === cat ? '#991b1b' : '#475569',
-                            fontWeight: '700',
-                            fontSize: '11.5px',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          {cat}
-                        </button>
+                  {/* Resumen de Cortes del Pedido */}
+                  <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 16px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px', letterSpacing: '0.4px' }}>
+                      📦 Cortes a Despachar ({posSelectedOrder.items?.length || 0} ítems):
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                      {posSelectedOrder.items?.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+                          <span><strong>{item.cantidad} {item.unidad || 'kg'}</strong> de {item.nombre}</span>
+                          <strong style={{ color: '#0f172a' }}>{formatCOP((item.precio || item.precioVenta || 0) * item.cantidad)}</strong>
+                        </div>
                       ))}
                     </div>
-                  </div>
-
-                  {/* Product & Quantity Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px', alignItems: 'flex-start' }}>
-                    
-                    {/* Select Product */}
-                    <div>
-                      <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px', display: 'block', marginBottom: '4px' }}>
-                        2. Seleccionar Producto:
-                      </label>
-                      <select
-                        className="input-control"
-                        value={posSelectedProdId}
-                        onChange={(e) => {
-                          setPosSelectedProdId(e.target.value)
-                          const p = inventario.find(i => String(i.id) === e.target.value)
-                          if (p && (p.categoria === 'Embutidos' || p.nombre.toLowerCase().includes('chorizo') || p.nombre.toLowerCase().includes('hamburguesa'))) {
-                            setPosUnit('und')
-                          }
-                        }}
-                        style={{ fontSize: '13px', fontWeight: '700', height: '40px', padding: '0 10px', borderColor: '#cbd5e1' }}
-                      >
-                        <option value="" disabled>-- Selecciona un corte --</option>
-                        {inventario
-                          .filter(i => posCategory === 'Todas' || i.categoria === posCategory)
-                          .map(p => {
-                            const hasDcto = Number(p.descuento) > 0
-                            const effPrice = hasDcto ? (p.precioVenta * (1 - p.descuento / 100)) : p.precioVenta
-                            return (
-                              <option key={p.id} value={p.id}>
-                                {p.nombre} — {formatCOP(effPrice)}/kg {hasDcto ? `(🔥 ${p.descuento}% OFF)` : ''} (Stock: {Number(p.stock).toFixed(1)})
-                              </option>
-                            )
-                          })}
-                      </select>
-                    </div>
-
-                    {/* Quantity & Unit */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px' }}>
-                          3. Cantidad ({posUnit}):
-                        </label>
-                        {/* Unit Selector */}
-                        <div style={{ display: 'flex', gap: '2px', background: '#e2e8f0', padding: '2px', borderRadius: '6px' }}>
-                          {['kg', 'lb', 'und'].map(u => (
-                            <button
-                              key={u}
-                              type="button"
-                              onClick={() => setPosUnit(u)}
-                              style={{
-                                border: 'none',
-                                background: posUnit === u ? '#ffffff' : 'transparent',
-                                color: posUnit === u ? '#0f172a' : '#64748b',
-                                fontWeight: '800',
-                                fontSize: '10.5px',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {u}
-                            </button>
-                          ))}
-                        </div>
+                    {posSelectedOrder.notas && (
+                      <div style={{ marginTop: '10px', fontSize: '12px', color: '#b45309', background: '#fffbeb', padding: '6px 10px', borderRadius: '6px', border: '1px solid #fef3c7' }}>
+                        📝 <strong>Notas:</strong> {posSelectedOrder.notas}
                       </div>
-
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <input
-                          type="number"
-                          step={posUnit === 'und' ? '1' : '0.25'}
-                          min="0.1"
-                          className="input-control"
-                          value={posQty}
-                          onChange={(e) => setPosQty(Math.max(0.1, parseFloat(e.target.value) || 0))}
-                          style={{ fontSize: '15px', fontWeight: '800', height: '40px', textAlign: 'center', padding: '0 8px' }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quick increment buttons & Subtotal calculation preview */}
-                  {(() => {
-                    const currentProd = inventario.find(i => String(i.id) === String(posSelectedProdId)) || inventario[0]
-                    if (!currentProd) return null
-                    const effBasePrice = Number(currentProd.descuento) > 0 
-                      ? (Number(currentProd.precioVenta) * (1 - Number(currentProd.descuento) / 100))
-                      : Number(currentProd.precioVenta)
-                    const unitPrice = posUnit === 'lb' ? (effBasePrice / 2) : effBasePrice
-                    const itemSubtotal = (Number(posQty) || 0) * unitPrice
-                    const isOutOfStock = Number(currentProd.stock) <= 0
-
-                    return (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '700' }}>Rápido:</span>
-                          {[0.5, 1, 2, 3, 5].map(q => (
-                            <button
-                              key={q}
-                              type="button"
-                              onClick={() => setPosQty(q)}
-                              style={{
-                                padding: '3px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid #cbd5e1',
-                                background: posQty === q ? '#0f172a' : '#ffffff',
-                                color: posQty === q ? '#ffffff' : '#334155',
-                                fontSize: '11px',
-                                fontWeight: '700',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              +{q}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '10.5px', color: '#64748b' }}>
-                              Stock: <strong style={{ color: isOutOfStock ? '#dc2626' : '#059669' }}>{Number(currentProd.stock).toFixed(1)} {posUnit === 'lb' ? 'kg (~' + (Number(currentProd.stock)*2).toFixed(0) + ' lb)' : 'disponibles'}</strong>
-                              {Number(currentProd.descuento) > 0 && <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: '700' }}>(-{currentProd.descuento}%)</span>}
-                            </div>
-                            <div style={{ fontSize: '14px', fontWeight: '900', color: '#dc2626' }}>
-                              {formatCOP(itemSubtotal)}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={isOutOfStock}
-                            onClick={handlePosAddToCart}
-                            style={{
-                              padding: '8px 14px',
-                              fontSize: '12.5px',
-                              fontWeight: '800',
-                              background: isOutOfStock ? '#94a3b8' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                              borderColor: '#b91c1c',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              borderRadius: '8px'
-                            }}
-                          >
-                            ➕ Agregar
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-
-                {/* 2. LISTA DE PRODUCTOS AGREGADOS A LA VENTA */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#0f172a', letterSpacing: '0.4px', margin: 0 }}>
-                      🛒 Productos en la Venta ({posCart.length}):
-                    </label>
-                    {posCart.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setPosCart([])}
-                        style={{ border: 'none', background: 'transparent', color: '#dc2626', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
-                      >
-                        Vaciar lista
-                      </button>
                     )}
                   </div>
 
-                  {posCart.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '24px 16px', background: '#f8fafc', borderRadius: '12px', border: '1.5px dashed #cbd5e1', color: '#64748b' }}>
-                      <span style={{ fontSize: '28px', display: 'block', marginBottom: '4px' }}>🥩</span>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '600' }}>
-                        Aún no has agregado productos a esta venta.
-                      </p>
-                      <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
-                        Selecciona un corte arriba y haz clic en <strong>"➕ Agregar"</strong>.
-                      </span>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '2px' }}>
-                      {posCart.map((item, idx) => (
-                        <div
-                          key={idx}
+                  {/* Método de Pago y Vueltas */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                        Método de Pago:
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setNewIncomePaymentMethod('Efectivo')}
                           style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            background: '#ffffff',
-                            padding: '10px 14px',
-                            borderRadius: '10px',
-                            border: '1px solid #e2e8f0',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                            background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#ffffff',
+                            color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#475569',
+                            fontWeight: '800',
+                            fontSize: '12px',
+                            cursor: 'pointer'
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{
-                              background: '#fee2e2',
-                              color: '#991b1b',
-                              fontWeight: '800',
-                              fontSize: '12px',
-                              padding: '3px 8px',
-                              borderRadius: '6px'
-                            }}>
-                              {item.cantidad} {item.unidad}
-                            </span>
-                            <div>
-                              <div style={{ fontWeight: '800', fontSize: '13.5px', color: '#0f172a' }}>
-                                {item.nombre}
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>{formatCOP(item.precioUnitario)} / {item.unidad}</span>
-                                {item.descuento > 0 && (
-                                  <span style={{ fontSize: '10px', background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
-                                    🔥 {item.descuento}% OFF
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <strong style={{ fontSize: '14.5px', color: '#0f172a', fontWeight: '900' }}>
-                              {formatCOP(item.subtotal)}
-                            </strong>
-                            <button
-                              type="button"
-                              onClick={() => handlePosRemoveFromCart(idx)}
-                              style={{
-                                border: 'none',
-                                background: '#fee2e2',
-                                color: '#dc2626',
-                                width: '28px',
-                                height: '28px',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '12px'
-                              }}
-                              title="Quitar de la venta"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                          💵 Efectivo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewIncomePaymentMethod('Transferencia')}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                            background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#ffffff',
+                            color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#475569',
+                            fontWeight: '800',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📲 Transf.
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* 3. DATOS DE PAGO Y VUELTAS */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                  {/* Payment Method */}
-                  <div>
-                    <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                      Método de Pago:
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setNewIncomePaymentMethod('Efectivo')}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
-                          background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#ffffff',
-                          color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#475569',
-                          fontWeight: '800',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        💵 Efectivo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewIncomePaymentMethod('Transferencia')}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#ffffff',
-                          color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#475569',
-                          fontWeight: '800',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        📲 Transf.
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Cash Change Calculator */}
-                  {newIncomePaymentMethod === 'Efectivo' ? (
-                    <div>
-                      <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '4px' }}>
-                        Paga con ($):
-                      </label>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {/* Vueltas / Cambio Calculator */}
+                    {newIncomePaymentMethod === 'Efectivo' ? (
+                      <div>
+                        <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                          Paga con ($):
+                        </label>
                         <input
                           type="text"
                           className="input-control"
@@ -5916,190 +5713,690 @@ function App() {
                           onChange={(e) => setPosCashReceived(parseFormattedNumber(e.target.value))}
                           style={{ height: '36px', fontSize: '13px', fontWeight: '800', padding: '0 8px' }}
                         />
+                        {(() => {
+                          const cashNum = parseFormattedNumber(posCashReceived) || 0
+                          if (cashNum > posSelectedOrder.total) {
+                            return (
+                              <div style={{ fontSize: '11.5px', color: '#047857', fontWeight: '800', marginTop: '4px' }}>
+                                🔄 Vueltas: {formatCOP(cashNum - posSelectedOrder.total)}
+                              </div>
+                            )
+                          }
+                          return null
+                        })()}
                       </div>
-                      {(() => {
-                        const totalSale = posCart.reduce((sum, item) => sum + item.subtotal, 0)
-                        const cashNum = parseFormattedNumber(posCashReceived) || 0
-                        if (cashNum > totalSale && totalSale > 0) {
-                          return (
-                            <div style={{ fontSize: '11.5px', color: '#047857', fontWeight: '800', marginTop: '4px' }}>
-                              🔄 Vueltas: {formatCOP(cashNum - totalSale)}
-                            </div>
-                          )
-                        }
-                        return null
-                      })()}
-                    </div>
-                  ) : (
-                    <div>
-                      <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '4px' }}>
-                        Nombre del Cliente (Opcional):
-                      </label>
-                      <input
-                        type="text"
-                        className="input-control"
-                        value={posClientName}
-                        onChange={(e) => setPosClientName(e.target.value)}
-                        placeholder="Cliente Mostrador"
-                        style={{ height: '36px', fontSize: '12.5px', padding: '0 8px' }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. TOTAL GENERAL & BOTÓN CONFIRMAR */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                  padding: '14px 18px',
-                  borderRadius: '14px',
-                  border: '1.5px solid #e2e8f0',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px' }}>
-                      Total de la Venta:
-                    </span>
-                    <div style={{ fontSize: '11px', color: '#059669', fontWeight: '600' }}>
-                      {posCart.length} {posCart.length === 1 ? 'producto listo' : 'productos listos'}
-                    </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', fontSize: '12px', color: '#1e40af', background: '#eff6ff', padding: '8px 10px', borderRadius: '8px' }}>
+                        <span>✓ Pago electrónico directo</span>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>Transferencia Nequi/Daviplata</span>
+                      </div>
+                    )}
                   </div>
 
-                  <strong style={{ fontSize: '26px', fontWeight: '900', color: '#dc2626' }}>
-                    {formatCOP(posCart.reduce((sum, item) => sum + item.subtotal, 0))}
-                  </strong>
+                  {/* Total del Pedido a Cobrar */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                    padding: '14px 18px',
+                    borderRadius: '14px',
+                    border: '1.5px solid #e2e8f0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px' }}>
+                        Total Liquidado:
+                      </span>
+                      <div style={{ fontSize: '11px', color: '#059669', fontWeight: '600' }}>
+                        Cobro listo para asentar en caja
+                      </div>
+                    </div>
+
+                    <strong style={{ fontSize: '26px', fontWeight: '900', color: '#dc2626' }}>
+                      {formatCOP(posSelectedOrder.total)}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Footer de Cobro */}
+                <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => { setShowAddIncomeModal(false); setPosSelectedOrder(null); }}
+                    disabled={chargeLoading}
+                    style={{ padding: '9px 18px', borderRadius: '10px' }}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="btn btn-primary"
+                    onClick={() => handleDeliverOrder(posSelectedOrder.id, newIncomePaymentMethod)}
+                    disabled={chargeLoading}
+                    style={{ 
+                      padding: '10px 22px', 
+                      borderRadius: '10px', 
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                      borderColor: '#059669', 
+                      color: '#ffffff', 
+                      fontWeight: '800',
+                      fontSize: '13.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                    }}
+                  >
+                    {chargeLoading ? '⏳ Procesando Cobro...' : `✓ Confirmar Cobro (${formatCOP(posSelectedOrder.total)}) & Entregar`}
+                  </button>
                 </div>
               </div>
             ) : (
-              /* TAB 2: INGRESO MANUAL EXTRAORDINARIO */
-              <form onSubmit={handleAddIncome} style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                      Concepto / Descripción del Ingreso *
-                    </label>
-                    <input 
-                      type="text" 
-                      className="input-control" 
-                      placeholder="Ej. Abono cliente Don Carlos, Ajuste de caja, Propinas"
-                      value={newIncomeDesc}
-                      onChange={(e) => setNewIncomeDesc(e.target.value)}
-                      required
-                      style={{ fontSize: '14px', padding: '0 14px', height: '44px' }}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                      Monto del Ingreso (COP) *
-                    </label>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <span style={{ position: 'absolute', left: '14px', fontSize: '15px', color: '#64748b', fontWeight: '800', pointerEvents: 'none' }}>$</span>
-                      <input 
-                        type="text" 
-                        className="input-control" 
-                        value={formatNumberWithDots(newIncomeAmount)}
-                        onChange={(e) => setNewIncomeAmount(parseFormattedNumber(e.target.value))}
-                        required
-                        style={{ fontSize: '17px', fontWeight: '800', padding: '0 14px 0 32px', height: '44px', color: '#059669' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                      Método de Pago Recibido *
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setNewIncomePaymentMethod('Efectivo')}
-                        style={{
-                          padding: '12px 16px',
-                          borderRadius: '12px',
-                          border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
-                          background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#f8fafc',
-                          color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#334155',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          fontWeight: '800',
-                          fontSize: '13.5px',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <span>💵</span> Efectivo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewIncomePaymentMethod('Transferencia')}
-                        style={{
-                          padding: '12px 16px',
-                          borderRadius: '12px',
-                          border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#f8fafc',
-                          color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#334155',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          fontWeight: '800',
-                          fontSize: '13.5px',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <span>📲</span> Transferencia
-                      </button>
-                    </div>
-                  </div>
+              /* CASO B: REGISTRO NORMAL DESDE CONTABILIDAD / CAJA */
+              <>
+                {/* Mode Switcher Tabs */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '6px 20px', gap: '8px', borderBottom: '1px solid #e2e8f0' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIncomeMode('pos')}
+                    style={{
+                      padding: '9px 14px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: incomeMode === 'pos' ? '#ffffff' : 'transparent',
+                      color: incomeMode === 'pos' ? '#dc2626' : '#64748b',
+                      fontWeight: '800',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      boxShadow: incomeMode === 'pos' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>🛒</span> Venta de Mostrador (POS)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIncomeMode('manual')}
+                    style={{
+                      padding: '9px 14px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: incomeMode === 'manual' ? '#ffffff' : 'transparent',
+                      color: incomeMode === 'manual' ? '#059669' : '#64748b',
+                      fontWeight: '800',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      boxShadow: incomeMode === 'manual' ? '0 2px 8px rgba(0,0,0,0.08)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <span>💵</span> Ingreso Libre / Ajuste
+                  </button>
                 </div>
 
-                <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddIncomeModal(false)}>Cancelar</button>
-                  <button type="submit" className="btn btn-success">✓ Asentar Ingreso Extraordinario</button>
-                </div>
-              </form>
-            )}
+                {/* Modal Body */}
+                {incomeMode === 'pos' ? (
+                  <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '78vh', overflowY: 'auto' }}>
+                    
+                    {/* 1. SELECCIÓN DE PRODUCTO Y CANTIDAD */}
+                    <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      
+                      {/* Category Filter Pills */}
+                      <div>
+                        <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px', display: 'block', marginBottom: '6px' }}>
+                          1. Filtrar por Categoría:
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {['Todas', 'Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                setPosCategory(cat)
+                                const prodsInCat = inventario.filter(i => cat === 'Todas' || i.categoria === cat)
+                                if (prodsInCat.length > 0) {
+                                  setPosSelectedProdId(String(prodsInCat[0].id))
+                                  if (cat === 'Embutidos') setPosUnit('und')
+                                  else setPosUnit('kg')
+                                }
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                border: posCategory === cat ? '1.5px solid #dc2626' : '1px solid #cbd5e1',
+                                background: posCategory === cat ? '#fee2e2' : '#ffffff',
+                                color: posCategory === cat ? '#991b1b' : '#475569',
+                                fontWeight: '700',
+                                fontSize: '11.5px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-            {/* Footer for POS mode */}
-            {incomeMode === 'pos' && (
-              <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  onClick={() => setShowAddIncomeModal(false)}
-                  disabled={posSubmitting}
-                  style={{ padding: '9px 18px', borderRadius: '10px' }}
-                >
-                  Cancelar
-                </button>
+                      {/* Product & Quantity Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '12px', alignItems: 'flex-start' }}>
+                        
+                        {/* Select Product */}
+                        <div>
+                          <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px', display: 'block', marginBottom: '4px' }}>
+                            2. Seleccionar Producto:
+                          </label>
+                          <select
+                            className="input-control"
+                            value={posSelectedProdId}
+                            onChange={(e) => {
+                              setPosSelectedProdId(e.target.value)
+                              const p = inventario.find(i => String(i.id) === e.target.value)
+                              if (p) {
+                                const u = normalizeUnit(p.unidadMedida || 'kg')
+                                setPosUnit(u)
+                                if (u === 'und') setPosQty(1)
+                              }
+                            }}
+                            style={{ fontSize: '13px', fontWeight: '700', height: '40px', padding: '0 10px', borderColor: '#cbd5e1' }}
+                          >
+                            <option value="" disabled>-- Selecciona un corte --</option>
+                            {inventario
+                              .filter(i => posCategory === 'Todas' || i.categoria === posCategory)
+                              .map(p => {
+                                const hasDcto = Number(p.descuento) > 0
+                                const effPrice = hasDcto ? (p.precioVenta * (1 - p.descuento / 100)) : p.precioVenta
+                                const uLabel = getPriceUnitLabel(p.unidadMedida)
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre} — {formatCOP(effPrice)} {uLabel} {hasDcto ? `(🔥 ${p.descuento}% OFF)` : ''} (Stock: {formatStockDisplay(p.stock, p.unidadMedida)})
+                                  </option>
+                                )
+                              })}
+                          </select>
+                        </div>
 
-                <button 
-                  type="button" 
-                  className="btn btn-primary"
-                  onClick={handleConfirmPosSale}
-                  disabled={posSubmitting || posCart.length === 0}
-                  style={{ 
-                    padding: '10px 22px', 
-                    borderRadius: '10px', 
-                    background: posCart.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                    borderColor: '#059669', 
-                    color: '#ffffff', 
-                    fontWeight: '800',
-                    fontSize: '13.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: posCart.length === 0 ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.4)'
-                  }}
-                >
-                  {posSubmitting ? '⏳ Registrando...' : `✓ Confirmar Venta (${formatCOP(posCart.reduce((sum, item) => sum + item.subtotal, 0))}) & Descontar Stock`}
-                </button>
-              </div>
+                        {/* Quantity & Unit */}
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px' }}>
+                              3. Cantidad ({posUnit}):
+                            </label>
+                            {/* Unit Selector */}
+                            {(() => {
+                              const currentProd = inventario.find(i => String(i.id) === String(posSelectedProdId)) || inventario[0]
+                              const allowedUnits = getAllowedSellUnits(currentProd?.unidadMedida)
+
+                              return (
+                                <div style={{ display: 'flex', gap: '2px', background: '#e2e8f0', padding: '2px', borderRadius: '6px' }}>
+                                  {allowedUnits.map(u => (
+                                    <button
+                                      key={u}
+                                      type="button"
+                                      onClick={() => {
+                                        setPosUnit(u)
+                                        if (u === 'und') setPosQty(Math.max(1, Math.round(posQty)))
+                                      }}
+                                      style={{
+                                        border: 'none',
+                                        background: posUnit === u ? '#ffffff' : 'transparent',
+                                        color: posUnit === u ? '#0f172a' : '#64748b',
+                                        fontWeight: '800',
+                                        fontSize: '10.5px',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {u}
+                                    </button>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <input
+                              type="number"
+                              step={posUnit === 'und' ? '1' : '0.25'}
+                              min={posUnit === 'und' ? '1' : '0.1'}
+                              className="input-control"
+                              value={posQty}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0
+                                setPosQty(posUnit === 'und' ? Math.max(1, Math.round(val)) : Math.max(0.1, val))
+                              }}
+                              style={{ fontSize: '15px', fontWeight: '800', height: '40px', textAlign: 'center', padding: '0 8px' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick increment buttons & Subtotal calculation preview */}
+                      {(() => {
+                        const currentProd = inventario.find(i => String(i.id) === String(posSelectedProdId)) || inventario[0]
+                        if (!currentProd) return null
+                        const unitPrice = calculateUnitPriceForSoldUnit(currentProd, posUnit)
+                        const itemSubtotal = (Number(posQty) || 0) * unitPrice
+                        const isOutOfStock = Number(currentProd.stock) <= 0
+                        const isUnd = normalizeUnit(currentProd.unidadMedida) === 'und'
+
+                        return (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '700' }}>Rápido:</span>
+                              {(isUnd ? [1, 2, 3, 5, 10] : [0.5, 1, 2, 3, 5]).map(q => (
+                                <button
+                                  key={q}
+                                  type="button"
+                                  onClick={() => setPosQty(q)}
+                                  style={{
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    background: posQty === q ? '#0f172a' : '#ffffff',
+                                    color: posQty === q ? '#ffffff' : '#334155',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  +{q}
+                                </button>
+                              ))}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                                  Stock: <strong style={{ color: isOutOfStock ? '#dc2626' : '#059669' }}>{formatStockDisplay(currentProd.stock, currentProd.unidadMedida)}</strong>
+                                  {Number(currentProd.descuento) > 0 && <span style={{ color: '#dc2626', marginLeft: '4px', fontWeight: '700' }}>(-{currentProd.descuento}%)</span>}
+                                </div>
+                                <div style={{ fontSize: '14px', fontWeight: '900', color: '#dc2626' }}>
+                                  {formatCOP(itemSubtotal)}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={isOutOfStock}
+                                onClick={handlePosAddToCart}
+                                style={{
+                                  padding: '8px 14px',
+                                  fontSize: '12.5px',
+                                  fontWeight: '800',
+                                  background: isOutOfStock ? '#94a3b8' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                                  borderColor: '#b91c1c',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  borderRadius: '8px'
+                                }}
+                              >
+                                ➕ Agregar
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* 2. LISTA DE PRODUCTOS AGREGADOS A LA VENTA */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#0f172a', letterSpacing: '0.4px', margin: 0 }}>
+                          🛒 Productos en la Venta ({posCart.length}):
+                        </label>
+                        {posCart.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setPosCart([])}
+                            style={{ border: 'none', background: 'transparent', color: '#dc2626', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            Vaciar lista
+                          </button>
+                        )}
+                      </div>
+
+                      {posCart.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px 16px', background: '#f8fafc', borderRadius: '12px', border: '1.5px dashed #cbd5e1', color: '#64748b' }}>
+                          <span style={{ fontSize: '28px', display: 'block', marginBottom: '4px' }}>🥩</span>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: '600' }}>
+                            Aún no has agregado productos a esta venta.
+                          </p>
+                          <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                            Selecciona un corte arriba y haz clic en <strong>"➕ Agregar"</strong>.
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', paddingRight: '2px' }}>
+                          {posCart.map((item, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                background: '#ffffff',
+                                padding: '10px 14px',
+                                borderRadius: '10px',
+                                border: '1px solid #e2e8f0',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{
+                                  background: '#fee2e2',
+                                  color: '#991b1b',
+                                  fontWeight: '800',
+                                  fontSize: '12px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px'
+                                }}>
+                                  {item.cantidad} {item.unidad}
+                                </span>
+                                <div>
+                                  <div style={{ fontWeight: '800', fontSize: '13.5px', color: '#0f172a' }}>
+                                    {item.nombre}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span>{formatCOP(item.precioUnitario)} / {item.unidad}</span>
+                                    {item.descuento > 0 && (
+                                      <span style={{ fontSize: '10px', background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: '4px', fontWeight: '800' }}>
+                                        🔥 {item.descuento}% OFF
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <strong style={{ fontSize: '14.5px', color: '#0f172a', fontWeight: '900' }}>
+                                  {formatCOP(item.subtotal)}
+                                </strong>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePosRemoveFromCart(idx)}
+                                  style={{
+                                    border: 'none',
+                                    background: '#fee2e2',
+                                    color: '#dc2626',
+                                    width: '28px',
+                                    height: '28px',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '12px'
+                                  }}
+                                  title="Quitar de la venta"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. DATOS DE PAGO Y VUELTAS */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      {/* Payment Method */}
+                      <div>
+                        <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                          Método de Pago:
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setNewIncomePaymentMethod('Efectivo')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                              background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#ffffff',
+                              color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#475569',
+                              fontWeight: '800',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💵 Efectivo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewIncomePaymentMethod('Transferencia')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                              background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#ffffff',
+                              color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#475569',
+                              fontWeight: '800',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            📲 Transf.
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Cash Change Calculator */}
+                      {newIncomePaymentMethod === 'Efectivo' ? (
+                        <div>
+                          <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                            Paga con ($):
+                          </label>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              className="input-control"
+                              placeholder="Ej. 50.000"
+                              value={formatNumberWithDots(posCashReceived)}
+                              onChange={(e) => setPosCashReceived(parseFormattedNumber(e.target.value))}
+                              style={{ height: '36px', fontSize: '13px', fontWeight: '800', padding: '0 8px' }}
+                            />
+                          </div>
+                          {(() => {
+                            const totalSale = posCart.reduce((sum, item) => sum + item.subtotal, 0)
+                            const cashNum = parseFormattedNumber(posCashReceived) || 0
+                            if (cashNum > totalSale && totalSale > 0) {
+                              return (
+                                <div style={{ fontSize: '11.5px', color: '#047857', fontWeight: '800', marginTop: '4px' }}>
+                                  🔄 Vueltas: {formatCOP(cashNum - totalSale)}
+                                </div>
+                              )
+                            }
+                            return null
+                          })()}
+                        </div>
+                      ) : (
+                        <div>
+                          <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                            Nombre del Cliente (Opcional):
+                          </label>
+                          <input
+                            type="text"
+                            className="input-control"
+                            value={posClientName}
+                            onChange={(e) => setPosClientName(e.target.value)}
+                            placeholder="Cliente Mostrador"
+                            style={{ height: '36px', fontSize: '12.5px', padding: '0 8px' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4. TOTAL GENERAL & BOTÓN CONFIRMAR */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                      padding: '14px 18px',
+                      borderRadius: '14px',
+                      border: '1.5px solid #e2e8f0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.4px' }}>
+                          Total de la Venta:
+                        </span>
+                        <div style={{ fontSize: '11px', color: '#059669', fontWeight: '600' }}>
+                          {posCart.length} {posCart.length === 1 ? 'producto listo' : 'productos listos'}
+                        </div>
+                      </div>
+
+                      <strong style={{ fontSize: '26px', fontWeight: '900', color: '#dc2626' }}>
+                        {formatCOP(posCart.reduce((sum, item) => sum + item.subtotal, 0))}
+                      </strong>
+                    </div>
+                  </div>
+                ) : (
+                  /* TAB 2: INGRESO MANUAL EXTRAORDINARIO */
+                  <form onSubmit={handleAddIncome} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                          Concepto / Descripción del Ingreso *
+                        </label>
+                        <input 
+                          type="text" 
+                          className="input-control" 
+                          placeholder="Ej. Abono cliente Don Carlos, Ajuste de caja, Propinas"
+                          value={newIncomeDesc}
+                          onChange={(e) => setNewIncomeDesc(e.target.value)}
+                          required
+                          style={{ fontSize: '14px', padding: '0 14px', height: '44px' }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                          Monto del Ingreso (COP) *
+                        </label>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                          <span style={{ position: 'absolute', left: '14px', fontSize: '15px', color: '#64748b', fontWeight: '800', pointerEvents: 'none' }}>$</span>
+                          <input 
+                            type="text" 
+                            className="input-control" 
+                            value={formatNumberWithDots(newIncomeAmount)}
+                            onChange={(e) => setNewIncomeAmount(parseFormattedNumber(e.target.value))}
+                            required
+                            style={{ fontSize: '17px', fontWeight: '800', padding: '0 14px 0 32px', height: '44px', color: '#059669' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                          Método de Pago Recibido *
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setNewIncomePaymentMethod('Efectivo')}
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: '12px',
+                              border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                              background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#f8fafc',
+                              color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#334155',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: '800',
+                              fontSize: '13.5px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <span>💵</span> Efectivo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewIncomePaymentMethod('Transferencia')}
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: '12px',
+                              border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                              background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#f8fafc',
+                              color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#334155',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: '800',
+                              fontSize: '13.5px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <span>📲</span> Transferencia
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowAddIncomeModal(false)}>Cancelar</button>
+                      <button type="submit" className="btn btn-success">✓ Asentar Ingreso Extraordinario</button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Footer for POS mode */}
+                {incomeMode === 'pos' && (
+                  <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowAddIncomeModal(false)}
+                      disabled={posSubmitting}
+                      style={{ padding: '9px 18px', borderRadius: '10px' }}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button 
+                      type="button" 
+                      className="btn btn-primary"
+                      onClick={handleConfirmPosSale}
+                      disabled={posSubmitting || posCart.length === 0}
+                      style={{ 
+                        padding: '10px 22px', 
+                        borderRadius: '10px', 
+                        background: posCart.length === 0 ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                        borderColor: '#059669', 
+                        color: '#ffffff', 
+                        fontWeight: '800',
+                        fontSize: '13.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: posCart.length === 0 ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.4)'
+                      }}
+                    >
+                      {posSubmitting ? '⏳ Registrando...' : `✓ Confirmar Venta (${formatCOP(posCart.reduce((sum, item) => sum + item.subtotal, 0))}) & Descontar Stock`}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -6172,7 +6469,7 @@ function App() {
                 <div>
                   <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Precio Base Actual</span>
                   <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
-                    {formatCOP(discountProduct.precioVenta)} <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>/ kg</span>
+                    {formatCOP(discountProduct.precioVenta)} <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{getPriceUnitLabel(discountProduct.unidadMedida)}</span>
                   </div>
                 </div>
                 <span className="badge" style={{ background: '#e2e8f0', color: '#334155', fontWeight: '700', padding: '4px 10px' }}>
@@ -6234,6 +6531,7 @@ function App() {
                 const originalPrice = Number(discountProduct.precioVenta) || 0
                 const savings = (originalPrice * discountPercent) / 100
                 const finalPrice = originalPrice - savings
+                const uLabel = getPriceUnitLabel(discountProduct.unidadMedida)
 
                 return (
                   <div style={{
@@ -6247,14 +6545,14 @@ function App() {
                   }}>
                     <div>
                       <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700', display: 'block' }}>
-                        {discountPercent > 0 ? `🔥 Ahorro: -${formatCOP(savings)} / kg` : 'Sin descuento'}
+                        {discountPercent > 0 ? `🔥 Ahorro: -${formatCOP(savings)} ${uLabel}` : 'Sin descuento'}
                       </span>
                       <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
                         Precio Final a Cobrar:
                       </span>
                     </div>
                     <strong style={{ fontSize: '22px', fontWeight: '900', color: discountPercent > 0 ? '#dc2626' : '#0f172a' }}>
-                      {formatCOP(finalPrice)} <span style={{ fontSize: '12px', fontWeight: '600' }}>/ kg</span>
+                      {formatCOP(finalPrice)} <span style={{ fontSize: '12px', fontWeight: '600' }}>{uLabel}</span>
                     </strong>
                   </div>
                 )
@@ -6431,6 +6729,43 @@ function App() {
                 </div>
               </div>
 
+              {/* Unit of Measure Selector */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                  Tipo de Unidad de Medida *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' }}>
+                  {[
+                    { id: 'kg', label: '🥩 Kilogramos (kg)', desc: 'Carne pesada por kilo' },
+                    { id: 'lb', label: '⚖️ Libras (lb)', desc: 'Carne pesada por libra' },
+                    { id: 'und', label: '📦 Unidades (und)', desc: 'Chorizos, arepas, hamburguesas' }
+                  ].map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setNewProdUnit(u.id)}
+                      style={{
+                        padding: '10px 8px',
+                        borderRadius: '12px',
+                        border: newProdUnit === u.id ? '2px solid #dc2626' : '1px solid #cbd5e1',
+                        background: newProdUnit === u.id ? '#fef2f2' : '#ffffff',
+                        color: newProdUnit === u.id ? '#991b1b' : '#334155',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: newProdUnit === u.id ? '0 2px 8px rgba(220, 38, 38, 0.2)' : 'none'
+                      }}
+                    >
+                      <strong style={{ fontSize: '12px' }}>{u.label}</strong>
+                      <span style={{ fontSize: '10px', color: '#64748b', textAlign: 'center' }}>{u.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
@@ -6439,7 +6774,12 @@ function App() {
                   <select 
                     className="input-control"
                     value={newProdCategory}
-                    onChange={(e) => setNewProdCategory(e.target.value)}
+                    onChange={(e) => {
+                      setNewProdCategory(e.target.value)
+                      if (e.target.value === 'Embutidos') {
+                        setNewProdUnit('und')
+                      }
+                    }}
                     style={{ fontSize: '13px', fontWeight: '600' }}
                   >
                     {['Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
@@ -6450,12 +6790,12 @@ function App() {
                 
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                    Precio Venta ($/kg) *
+                    Precio Venta ($ {getPriceUnitLabel(newProdUnit)}) *
                   </label>
                   <input 
                     type="text" 
                     className="input-control" 
-                    placeholder="Ej. 28.000" 
+                    placeholder={newProdUnit === 'und' ? 'Ej. 4.000' : 'Ej. 28.000'} 
                     value={formatNumberWithDots(newProdPrice)}
                     onChange={(e) => setNewProdPrice(parseFormattedNumber(e.target.value))}
                     required
@@ -6480,32 +6820,31 @@ function App() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                    Stock Inicial (kg) *
+                    Stock Inicial ({newProdUnit === 'und' ? 'unidades' : newProdUnit === 'lb' ? 'lb' : 'kg'}) *
                   </label>
                   <input 
                     type="number" 
-                    step="any"
+                    step={newProdUnit === 'und' ? '1' : 'any'}
                     min="0"
                     className="input-control" 
-                    placeholder="Ej. 40" 
+                    placeholder={newProdUnit === 'und' ? 'Ej. 20' : 'Ej. 40'} 
                     value={newProdStock || ''}
-                    onChange={(e) => setNewProdStock(Number(e.target.value))}
+                    onChange={(e) => setNewProdStock(newProdUnit === 'und' ? Math.round(Number(e.target.value)) : Number(e.target.value))}
                     style={{ fontSize: '14px', fontWeight: '700', padding: '0 14px', height: '44px' }}
                   />
                 </div>
                 
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                    Límite Mínimo Alerta (kg)
+                    Límite Mínimo Alerta ({newProdUnit === 'und' ? 'unidades' : newProdUnit === 'lb' ? 'lb' : 'kg'})
                   </label>
                   <input 
                     type="number" 
-                    step="any"
-                    min="1"
+                    step={newProdUnit === 'und' ? '1' : 'any'}
+                    min="0"
                     className="input-control" 
-                    placeholder="Ej. 10" 
                     value={newProdLimitMin || ''}
-                    onChange={(e) => setNewProdLimitMin(Number(e.target.value))}
+                    onChange={(e) => setNewProdLimitMin(newProdUnit === 'und' ? Math.round(Number(e.target.value)) : Number(e.target.value))}
                     style={{ fontSize: '14px', fontWeight: '700', padding: '0 14px', height: '44px' }}
                   />
                 </div>
@@ -7312,280 +7651,20 @@ function App() {
                     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
                     borderColor: '#059669', 
                     color: '#ffffff', 
-                    fontWeight: '800' 
+                    fontWeight: '800',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
                   }}
                   onClick={() => {
                     const order = selectedOrderDetail
                     setSelectedOrderDetail(null)
-                    setOrderToCharge(order)
-                    setChargePaymentMethod('Efectivo')
+                    handleOpenChargeOrderModal(order)
                   }}
                 >
                   💳 Cobrar & Entregar
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================================================================= */}
-      {/* 💳 MODAL: COBRAR Y ENTREGAR PEDIDO (INTEGRADO CON CONTABILIDAD) */}
-      {/* ================================================================= */}
-      {orderToCharge && (
-        <div className="modal-overlay" onClick={() => !chargeLoading && setOrderToCharge(null)}>
-          <div 
-            className="modal-card animate-fade-in" 
-            onClick={(e) => e.stopPropagation()} 
-            style={{ 
-              maxWidth: '520px', 
-              width: '92%', 
-              borderRadius: '20px',
-              overflow: 'hidden',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-            }}
-          >
-            {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '20px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '18px',
-                  boxShadow: '0 4px 10px rgba(220, 38, 38, 0.3)'
-                }}>
-                  💳
-                </div>
-                <div>
-                  <h3 className="modal-title" style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
-                    Cobrar y Entregar Pedido
-                  </h3>
-                  <p style={{ fontSize: '12.5px', color: '#64748b', margin: '3px 0 0 0' }}>
-                    Confirma la recepción del pago y finaliza la entrega
-                  </p>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setOrderToCharge(null)}
-                disabled={chargeLoading}
-                style={{ 
-                  border: 'none', 
-                  background: '#e2e8f0', 
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%', 
-                  fontSize: '14px', 
-                  cursor: 'pointer', 
-                  color: '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '22px 24px' }}>
-              
-              {/* Order Info Card */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
-                padding: '16px 20px', 
-                borderRadius: '14px', 
-                border: '1px solid #e2e8f0' 
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ 
-                    background: '#eff6ff', 
-                    color: '#1d4ed8', 
-                    padding: '3px 10px', 
-                    borderRadius: '6px', 
-                    fontSize: '12.5px', 
-                    fontWeight: '800',
-                    border: '1px solid #bfdbfe'
-                  }}>
-                    #{orderToCharge.id}
-                  </span>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '14px' }}>👤</span> {orderToCharge.cliente}
-                  </div>
-                </div>
-
-                <div style={{ height: '1px', background: '#e2e8f0', margin: '10px 0' }} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '2px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                    Total a Cobrar:
-                  </span>
-                  <strong style={{ fontSize: '24px', color: '#dc2626', fontWeight: '900' }}>
-                    {formatCOP(orderToCharge.total)}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Resumen de Productos */}
-              {orderToCharge.items && orderToCharge.items.length > 0 && (
-                <div>
-                  <label style={{ fontSize: '12.5px', fontWeight: '700', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                    <span>📦</span> Detalle de Cortes Solicitados ({orderToCharge.items.length}):
-                  </label>
-                  <div style={{ 
-                    maxHeight: '120px', 
-                    overflowY: 'auto', 
-                    background: '#ffffff', 
-                    border: '1px solid #e2e8f0', 
-                    borderRadius: '10px', 
-                    padding: '8px 14px',
-                    scrollbarWidth: 'thin'
-                  }}>
-                    {orderToCharge.items.map((item, idx) => (
-                      <div 
-                        key={idx} 
-                        style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center',
-                          fontSize: '13px', 
-                          padding: '5px 0',
-                          borderBottom: idx === orderToCharge.items.length - 1 ? 'none' : '1px dashed #f1f5f9'
-                        }}
-                      >
-                        <span style={{ color: '#334155' }}>
-                          <strong style={{ color: '#0f172a' }}>{item.cantidad} kg</strong> × {item.nombre}
-                        </span>
-                        <strong style={{ color: '#0f172a' }}>
-                          {formatCOP((item.precio || item.precioVenta || 0) * item.cantidad)}
-                        </strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Selector de Método de Pago */}
-              <div>
-                <label style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', display: 'block', marginBottom: '10px' }}>
-                  Selecciona el Método de Pago para el Cobro:
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setChargePaymentMethod('Efectivo')}
-                    style={{
-                      padding: '14px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      borderRadius: '12px',
-                      fontSize: '14px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      border: chargePaymentMethod === 'Efectivo' ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                      backgroundColor: chargePaymentMethod === 'Efectivo' ? '#dc2626' : '#ffffff',
-                      color: chargePaymentMethod === 'Efectivo' ? '#ffffff' : '#334155',
-                      boxShadow: chargePaymentMethod === 'Efectivo' ? '0 4px 12px rgba(220, 38, 38, 0.25)' : '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <span style={{ fontSize: '18px' }}>💵</span>
-                    <span>Efectivo</span>
-                    {chargePaymentMethod === 'Efectivo' && <span style={{ marginLeft: 'auto', fontWeight: '900' }}>✓</span>}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setChargePaymentMethod('Transferencia')}
-                    style={{
-                      padding: '14px 16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      borderRadius: '12px',
-                      fontSize: '14px',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      border: chargePaymentMethod === 'Transferencia' ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                      backgroundColor: chargePaymentMethod === 'Transferencia' ? '#dc2626' : '#ffffff',
-                      color: chargePaymentMethod === 'Transferencia' ? '#ffffff' : '#334155',
-                      boxShadow: chargePaymentMethod === 'Transferencia' ? '0 4px 12px rgba(220, 38, 38, 0.25)' : '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <span style={{ fontSize: '18px' }}>📲</span>
-                    <span>Transferencia</span>
-                    {chargePaymentMethod === 'Transferencia' && <span style={{ marginLeft: 'auto', fontWeight: '900' }}>✓</span>}
-                  </button>
-                </div>
-              </div>
-
-              {/* Informative Callout */}
-              <div style={{ 
-                background: '#f0fdf4', 
-                border: '1px solid #bbf7d0', 
-                borderRadius: '10px', 
-                padding: '10px 14px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '10px' 
-              }}>
-                <span style={{ fontSize: '18px', flexShrink: 0 }}>💡</span>
-                <span style={{ fontSize: '12px', color: '#166534', lineHeight: '1.4' }}>
-                  La venta se registrará automáticamente como <strong>Ingreso</strong> en el módulo de Contabilidad y se actualizará el balance de caja.
-                </span>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="modal-footer" style={{ 
-              display: 'flex', 
-              gap: '12px', 
-              justifyContent: 'flex-end', 
-              padding: '16px 24px', 
-              background: '#f8fafc',
-              borderTop: '1px solid #e2e8f0' 
-            }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => setOrderToCharge(null)}
-                disabled={chargeLoading}
-                style={{ padding: '10px 18px', borderRadius: '10px', fontWeight: '600' }}
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button" 
-                onClick={() => handleDeliverOrder(orderToCharge.id, chargePaymentMethod)}
-                disabled={chargeLoading}
-                style={{ 
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                  border: 'none', 
-                  color: '#ffffff', 
-                  fontWeight: '800',
-                  padding: '11px 22px',
-                  borderRadius: '10px',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-                  cursor: chargeLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '14px'
-                }}
-              >
-                {chargeLoading ? 'Registrando...' : '✓ Confirmar Cobro & Entrega'}
-              </button>
             </div>
           </div>
         </div>

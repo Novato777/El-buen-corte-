@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v2 as cloudinary } from 'cloudinary';
 import pool from './db.js';
+import { normalizeUnit, calculateStockDeduction, calculateUnitPriceForSoldUnit, formatStockDisplay, convertQuantity } from './units.js';
 
 dotenv.config();
 
@@ -195,6 +196,12 @@ const initDatabase = async () => {
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS foto TEXT;
       ALTER TABLE inventario ADD COLUMN IF NOT EXISTS descuento NUMERIC(5, 2) NOT NULL DEFAULT 0;
+      ALTER TABLE inventario ADD COLUMN IF NOT EXISTS unidad_medida VARCHAR(20) NOT NULL DEFAULT 'kg';
+      -- Migración automática para productos por unidad existentes
+      UPDATE inventario 
+      SET unidad_medida = 'und' 
+      WHERE (categoria = 'Embutidos' OR LOWER(nombre) LIKE '%chorizo%' OR LOWER(nombre) LIKE '%salchicha%' OR LOWER(nombre) LIKE '%hamburguesa%' OR LOWER(nombre) LIKE '%arepa%') 
+        AND (unidad_medida = 'kg' OR unidad_medida IS NULL);
     `);
 
     // 5. Tabla de Pedidos
@@ -229,6 +236,7 @@ const initDatabase = async () => {
         cantidad NUMERIC(10, 2) NOT NULL,
         precio NUMERIC(12, 2) NOT NULL
       );
+      ALTER TABLE pedido_items ADD COLUMN IF NOT EXISTS unidad VARCHAR(20) NOT NULL DEFAULT 'kg';
     `);
 
     // 7. Tabla de Transacciones (Caja / Contabilidad)
@@ -305,61 +313,6 @@ const initDatabase = async () => {
 };
 
 initDatabase();
-
-// Datos de Perfil por Defecto (como fallback)
-const DEFAULT_PROFILE = {
-  general: {
-    nombre: 'El Buen Corte',
-    nombreComercial: '',
-    razonSocial: 'El Buen Corte S.A.S.',
-    tipoNegocio: 'Carnicería',
-    tipoNegocioOtro: '',
-    descripcion: 'Carnicería premium especializada en cortes finos de res, cerdo y embutidos artesanales.',
-    anoCreacion: '2024',
-    estado: 'Activo'
-  },
-  identidad: { logo: '', portada: '' },
-  contacto: {
-    telefonoPrincipal: '+57 322 206 7870',
-    telefonoSecundario: '',
-    whatsapp: '+57 322 206 7870',
-    email: 'cardozobrayan334@gmail.com',
-    sitioWeb: 'https://elbuencorte.com'
-  },
-  ubicacion: {
-    pais: 'Colombia',
-    departamento: 'Cundinamarca',
-    ciudad: 'Bogotá',
-    direccion: 'Calle 80 #15-20',
-    codigoPostal: '110111',
-    latitud: '',
-    longitud: ''
-  },
-  redes: [
-    { id: '1', plataforma: 'Facebook', usuario: 'El Buen Corte', url: 'https://facebook.com/elbuencorte' },
-    { id: '2', plataforma: 'Instagram', usuario: '@elbuencorte', url: 'https://instagram.com/elbuencorte' }
-  ],
-  horarios: {
-    'Lunes': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Martes': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Miércoles': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Jueves': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Viernes': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Sábado': { abierto: true, apertura: '08:00', cierre: '20:00' },
-    'Domingo': { abierto: false, apertura: '09:00', cierre: '14:00' }
-  },
-  financiero: {
-    moneda: 'COP',
-    simbolo: '$',
-    nit: '901.234.567-8',
-    responsable: 'Brayan Cardozo'
-  },
-  adicional: {
-    mision: 'Proveer los mejores cortes de carne con altos estándares de higiene y servicio excepcional.',
-    vision: 'Ser la carnicería líder y de confianza preferida por los hogares y restaurantes de la región.',
-    servicios: ['Venta de carnes', 'Servicio a domicilio', 'Cortes personalizados', 'Empaque al vacío']
-  }
-};
 
 // ============================================================================
 //  RUTAS DE LA API
@@ -822,6 +775,7 @@ app.get('/api/public/productos', async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
+      unidadMedida: normalizeUnit(r.unidad_medida),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -931,24 +885,35 @@ app.post('/api/public/pedidos', async (req, res) => {
       }
       
       const prod = findResult.rows[0];
-      const cantidadVal = Number(oi.cantidad);
-      const precioVal = Number(prod.precio_venta);
+      const soldQty = Number(oi.cantidad);
+      const soldUnit = normalizeUnit(oi.unidad || prod.unidad_medida || 'kg');
+      const baseUnit = normalizeUnit(prod.unidad_medida || 'kg');
       
-      if (Number(prod.stock) < cantidadVal) {
-        return res.status(400).json({ error: `Stock insuficiente para "${prod.nombre}". Disponible: ${prod.stock} kg.` });
+      // Calcular deducción exacta según unidad de venta y unidad base
+      const stockDeduction = calculateStockDeduction(soldQty, soldUnit, baseUnit);
+      const currentStock = Number(prod.stock);
+
+      if (currentStock < stockDeduction) {
+        return res.status(400).json({ 
+          error: `Stock insuficiente para "${prod.nombre}". Disponible: ${formatStockDisplay(currentStock, baseUnit)}.` 
+        });
       }
 
-      // Descontar del inventario de forma atómica
-      const nuevoStock = Math.max(0, Number(prod.stock) - cantidadVal);
+      // Calcular precio unitario según la unidad vendida (con descuento si aplica)
+      const unitPrice = calculateUnitPriceForSoldUnit(prod, soldUnit);
+
+      // Descontar del inventario de forma atómica y precisa
+      const nuevoStock = Math.max(0, currentStock - stockDeduction);
       await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, oi.productoId]);
 
       orderItems.push({
         productoId: oi.productoId,
         nombre: prod.nombre,
-        cantidad: cantidadVal,
-        precio: precioVal
+        cantidad: soldQty,
+        unidad: soldUnit,
+        precio: unitPrice
       });
-      total += cantidadVal * precioVal;
+      total += soldQty * unitPrice;
     }
 
     const clienteDisplay = telefono ? `${cliente} (Tel: ${telefono})` : cliente;
@@ -963,9 +928,9 @@ app.post('/api/public/pedidos', async (req, res) => {
     // 2. Insertar cada ítem del pedido
     for (const item of orderItems) {
       await pool.query(
-        `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [orderId, item.productoId, item.nombre, item.cantidad, item.precio]
+        `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio, unidad)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [orderId, item.productoId, item.nombre, item.cantidad, item.precio, item.unidad]
       );
     }
 
@@ -1077,6 +1042,7 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
+      unidadMedida: normalizeUnit(r.unidad_medida),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -1091,11 +1057,13 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
 // Crear producto en el inventario
 app.post('/api/inventario', authenticateToken, async (req, res) => {
   try {
-    const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto, descuento } = req.body;
+    const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto, descuento, unidadMedida, unidad_medida } = req.body;
     
     if (!nombre || !precioVenta || !categoria) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precioVenta, categoria)' });
     }
+
+    const finalUnit = normalizeUnit(unidadMedida || unidad_medida || 'kg');
 
     // Obtener ID numérico máximo
     const maxResult = await pool.query('SELECT id FROM inventario');
@@ -1103,8 +1071,8 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
     const nuevoId = String(ids.length > 0 ? Math.max(...ids) + 1 : 1);
     
     const result = await pool.query(
-      `INSERT INTO inventario (id, nombre, categoria, descripcion, foto, precio_venta, stock, limite_min, descuento, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO inventario (id, nombre, categoria, descripcion, foto, precio_venta, stock, limite_min, descuento, unidad_medida, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         nuevoId,
@@ -1116,6 +1084,7 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
         Number(stock) || 0,
         Number(limiteMin) || 0,
         Math.max(0, Math.min(100, Number(descuento) || 0)),
+        finalUnit,
         req.user.id
       ]
     );
@@ -1129,6 +1098,7 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
+      unidadMedida: normalizeUnit(r.unidad_medida),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min)
     });
@@ -1164,6 +1134,7 @@ app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) =
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
+      unidadMedida: normalizeUnit(r.unidad_medida),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min)
     });
@@ -1192,7 +1163,7 @@ app.delete('/api/inventario/:id', authenticateToken, async (req, res) => {
 // Abastecer stock de un producto
 app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
   try {
-    const { productoId, cantidad } = req.body;
+    const { productoId, cantidad, unidad } = req.body;
     const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [productoId]);
     
     if (findResult.rows.length === 0) {
@@ -1200,13 +1171,18 @@ app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
     }
 
     const prod = findResult.rows[0];
-    const peso = Number(cantidad);
-    const nuevoStock = Number(prod.stock) + peso;
+    const rawQty = Number(cantidad);
+    const baseUnit = normalizeUnit(prod.unidad_medida || 'kg');
+    const inputUnit = normalizeUnit(unidad || baseUnit);
+
+    // Convertir a la unidad base del producto si aplica
+    const qtyInBaseUnit = convertQuantity(rawQty, inputUnit, baseUnit);
+    const nuevoStock = Number(prod.stock) + qtyInBaseUnit;
     
     await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, productoId]);
 
     // Registrar egreso estimado en contabilidad (70% del valor de venta como costo de compra)
-    const costoEstimado = Math.round(Number(prod.precio_venta) * 0.7 * peso);
+    const costoEstimado = Math.round(Number(prod.precio_venta) * 0.7 * qtyInBaseUnit);
     
     const countTrx = await pool.query('SELECT count(*) FROM transacciones');
     const trxId = `TRX-${100 + Number(countTrx.rows[0].count) + 1}`;
@@ -1216,7 +1192,7 @@ app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
       `INSERT INTO transacciones (id, tipo, descripcion, monto, fecha, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [trxId, 'Egreso', `Abastecimiento: +${peso}kg ${prod.nombre}`, costoEstimado, nowStr, req.user.id]
+      [trxId, 'Egreso', `Abastecimiento: +${rawQty} ${inputUnit} de ${prod.nombre}`, costoEstimado, nowStr, req.user.id]
     );
 
     res.json({
@@ -1227,6 +1203,8 @@ app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
         descripcion: prod.descripcion,
         foto: prod.foto,
         precioVenta: Number(prod.precio_venta),
+        descuento: Number(prod.descuento || 0),
+        unidadMedida: baseUnit,
         stock: nuevoStock,
         limiteMin: Number(prod.limite_min)
       },
@@ -1330,12 +1308,14 @@ app.get('/api/pedidos', authenticateToken, async (req, res) => {
         cliente: r.cliente,
         total: Number(r.total),
         estado: r.estado,
+        metodoPago: r.metodo_pago || 'Efectivo',
         fecha: r.fecha,
         items: itemsResult.rows.map(item => ({
           productoId: item.producto_id,
           nombre: item.nombre,
           cantidad: Number(item.cantidad),
-          precio: Number(item.precio)
+          precio: Number(item.precio),
+          unidad: normalizeUnit(item.unidad || 'kg')
         }))
       });
     }
@@ -1349,7 +1329,7 @@ app.get('/api/pedidos', authenticateToken, async (req, res) => {
 // Crear pedido desde el panel de administración
 app.post('/api/pedidos', authenticateToken, async (req, res) => {
   try {
-    const { cliente, items } = req.body;
+    const { cliente, items, metodoPago } = req.body;
     
     if (!cliente || !items || items.length === 0) {
       return res.status(400).json({ error: 'Datos de pedido incompletos' });
@@ -1370,34 +1350,38 @@ app.post('/api/pedidos', authenticateToken, async (req, res) => {
       
       const prod = findResult.rows[0];
       const cantidadVal = Number(oi.cantidad);
-      const precioVal = Number(prod.precio_venta);
+      const itemUnit = normalizeUnit(oi.unidad || prod.unidad_medida || 'kg');
+      const baseUnit = normalizeUnit(prod.unidad_medida || 'kg');
+      const precioVal = Number(oi.precio || calculateUnitPriceForSoldUnit(prod, itemUnit));
       
-      // Descontar del inventario
-      const nuevoStock = Math.max(0, Number(prod.stock) - cantidadVal);
+      // Descontar del inventario considerando conversiones de unidad
+      const stockDeduction = calculateStockDeduction(cantidadVal, itemUnit, baseUnit);
+      const nuevoStock = Math.max(0, Number(prod.stock) - stockDeduction);
       await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, oi.productoId]);
 
       orderItems.push({
         productoId: oi.productoId,
         nombre: prod.nombre,
         cantidad: cantidadVal,
-        precio: precioVal
+        precio: precioVal,
+        unidad: itemUnit
       });
       total += cantidadVal * precioVal;
     }
 
     // Insertar el pedido principal
     await pool.query(
-      `INSERT INTO pedidos (id, cliente, total, estado, fecha, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [orderId, cliente, total, 'Pendiente', dateStr, req.user.id]
+      `INSERT INTO pedidos (id, cliente, total, estado, metodo_pago, fecha, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [orderId, cliente, total, 'Pendiente', metodoPago || 'Efectivo', dateStr, req.user.id]
     );
 
     // Insertar cada ítem del pedido
     for (const item of orderItems) {
       await pool.query(
-        `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [orderId, item.productoId, item.nombre, item.cantidad, item.precio]
+        `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio, unidad)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [orderId, item.productoId, item.nombre, item.cantidad, item.precio, item.unidad]
       );
     }
 
@@ -1422,6 +1406,7 @@ app.post('/api/pedidos', authenticateToken, async (req, res) => {
       items: orderItems,
       total,
       estado: 'Pendiente',
+      metodoPago: metodoPago || 'Efectivo',
       fecha: dateStr
     });
   } catch (err) {
@@ -1446,14 +1431,16 @@ app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'El pedido ya no está pendiente' });
     }
 
-    await pool.query('UPDATE pedidos SET estado = $1 WHERE id = $2', [estado, id]);
+    const finalPaymentMethod = metodoPago || p.metodo_pago || 'Efectivo';
+    await pool.query('UPDATE pedidos SET estado = $1, metodo_pago = $2 WHERE id = $3', [estado, finalPaymentMethod, id]);
 
     const itemsResult = await pool.query('SELECT * FROM pedido_items WHERE pedido_id = $1', [id]);
     const orderItems = itemsResult.rows.map(item => ({
       productoId: item.producto_id,
       nombre: item.nombre,
       cantidad: Number(item.cantidad),
-      precio: Number(item.precio)
+      precio: Number(item.precio),
+      unidad: normalizeUnit(item.unidad || 'kg')
     }));
 
     const fullPedido = {
@@ -1461,6 +1448,7 @@ app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
       cliente: p.cliente,
       total: Number(p.total),
       estado: estado,
+      metodoPago: finalPaymentMethod,
       fecha: p.fecha,
       items: orderItems
     };
@@ -1475,18 +1463,30 @@ app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
         `INSERT INTO transacciones (id, tipo, descripcion, monto, metodo_pago, fecha, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [trxId, 'Ingreso', `Venta de ${p.cliente} (${p.id})`, Number(p.total), metodoPago || 'Efectivo', nowStr, req.user.id]
+        [trxId, 'Ingreso', `Venta de ${p.cliente} (${p.id})`, Number(p.total), finalPaymentMethod, nowStr, req.user.id]
       );
       
-      return res.json({ pedido: fullPedido, transaccion: insertTrx.rows[0] });
+      return res.json({ 
+        pedido: fullPedido, 
+        transaccion: {
+          id: insertTrx.rows[0].id,
+          tipo: insertTrx.rows[0].tipo,
+          descripcion: insertTrx.rows[0].descripcion,
+          monto: Number(insertTrx.rows[0].monto),
+          metodoPago: insertTrx.rows[0].metodo_pago,
+          fecha: insertTrx.rows[0].fecha
+        } 
+      });
     } 
     
     if (estado === 'Cancelado') {
-      // Devolver stock al inventario
+      // Devolver stock al inventario considerando unidades
       for (const item of orderItems) {
-        const prodResult = await pool.query('SELECT stock FROM inventario WHERE id = $1', [item.productoId]);
+        const prodResult = await pool.query('SELECT stock, unidad_medida FROM inventario WHERE id = $1', [item.productoId]);
         if (prodResult.rows.length > 0) {
-          const nuevoStock = Number(prodResult.rows[0].stock) + item.cantidad;
+          const prod = prodResult.rows[0];
+          const stockToAdd = calculateStockDeduction(item.cantidad, item.unidad, prod.unidad_medida || 'kg');
+          const nuevoStock = Number(prod.stock) + stockToAdd;
           await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, item.productoId]);
         }
       }
@@ -1591,26 +1591,41 @@ app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
     // 1. Si vienen ítems de productos vendidos (Flujo POS), verificar y descontar stock
     if (items && Array.isArray(items) && items.length > 0) {
       // Validar stock de todos los productos primero
+      const deductions = [];
+
       for (const item of items) {
-        const prodCheck = await pool.query('SELECT id, nombre, stock FROM inventario WHERE id = $1', [item.productoId]);
+        const prodCheck = await pool.query('SELECT id, nombre, stock, precio_venta, descuento, unidad_medida FROM inventario WHERE id = $1', [item.productoId]);
         if (prodCheck.rows.length === 0) {
           return res.status(400).json({ error: `El producto "${item.nombre || item.productoId}" no existe en el inventario.` });
         }
-        const currentStock = Number(prodCheck.rows[0].stock);
-        const qtyToDeduct = Number(item.cantidad);
-        if (currentStock < qtyToDeduct) {
+        const prod = prodCheck.rows[0];
+        const soldQty = Number(item.cantidad);
+        const soldUnit = normalizeUnit(item.unidad || prod.unidad_medida || 'kg');
+        const baseUnit = normalizeUnit(prod.unidad_medida || 'kg');
+        const stockDeduction = calculateStockDeduction(soldQty, soldUnit, baseUnit);
+        const currentStock = Number(prod.stock);
+
+        if (currentStock < stockDeduction) {
           return res.status(400).json({ 
-            error: `Stock insuficiente para "${prodCheck.rows[0].nombre}". Stock actual: ${currentStock.toFixed(2)}, solicitado: ${qtyToDeduct.toFixed(2)}` 
+            error: `Stock insuficiente para "${prod.nombre}". Disponible: ${formatStockDisplay(currentStock, baseUnit)}, solicitado: ${soldQty} ${soldUnit} (equivale a ${formatStockDisplay(stockDeduction, baseUnit)})` 
           });
         }
+
+        deductions.push({
+          productoId: item.productoId,
+          stockDeduction,
+          soldQty,
+          soldUnit,
+          nombre: prod.nombre,
+          precio: Number(item.precio || item.precioUnitario || 0)
+        });
       }
 
       // Descontar stock atómicamente
-      for (const item of items) {
-        const qtyToDeduct = Number(item.cantidad);
+      for (const d of deductions) {
         await pool.query(
           'UPDATE inventario SET stock = GREATEST(0, stock - $1) WHERE id = $2',
-          [qtyToDeduct, item.productoId]
+          [d.stockDeduction, d.productoId]
         );
       }
 
@@ -1625,11 +1640,11 @@ app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
         [orderId, cliente || 'Cliente Mostrador', Number(monto), 'Entregado', metodoPago, dateStr, req.user.id]
       );
 
-      for (const item of items) {
+      for (const d of deductions) {
         await pool.query(
-          `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [orderId, item.productoId, item.nombre, Number(item.cantidad), Number(item.precio || item.precioUnitario || 0)]
+          `INSERT INTO pedido_items (pedido_id, producto_id, nombre, cantidad, precio, unidad)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [orderId, d.productoId, d.nombre, d.soldQty, d.precio, d.soldUnit]
         );
       }
     }
