@@ -18,7 +18,10 @@ import {
   PhoneIcon,
   GlobeIcon,
   InstagramIcon,
-  FacebookIcon
+  FacebookIcon,
+  BrandLogoSvg,
+  BrandWatermark,
+  EmptyState
 } from './Icons'
 import { 
   normalizeUnit, 
@@ -31,6 +34,7 @@ import {
   getPriceUnitLabel,
   getAllowedSellUnits
 } from './utils/units'
+import { getIdempotencyHeaders } from './utils/idempotency'
 
 // Helper for formatting currencies in Colombian Pesos
 const formatCOP = (val) => {
@@ -74,6 +78,7 @@ export default function PublicTiendaVirtual() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false) // ℹ️ Modal "Sobre esta tienda"
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
+  const checkoutSubmittingRef = useRef(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [orderSuccessData, setOrderSuccessData] = useState(null)
 
@@ -514,7 +519,13 @@ export default function PublicTiendaVirtual() {
 
   // Submit Public Order & Redirect to WhatsApp Automatically
   const handleCheckoutSubmit = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+
+    // Bloqueo inmediato síncrono contra múltiples clics
+    if (checkoutSubmittingRef.current || checkoutSubmitting) {
+      return
+    }
+
     if (!checkoutForm.cliente.trim()) {
       setCheckoutError('Por favor ingresa tu nombre completo.')
       return
@@ -552,6 +563,7 @@ export default function PublicTiendaVirtual() {
       }
     }
 
+    checkoutSubmittingRef.current = true
     setCheckoutSubmitting(true)
     setCheckoutError('')
 
@@ -561,7 +573,10 @@ export default function PublicTiendaVirtual() {
     try {
       const res = await fetch(`${API_BASE}/public/pedidos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getIdempotencyHeaders()
+        },
         body: JSON.stringify(orderPayload)
       })
 
@@ -618,6 +633,7 @@ export default function PublicTiendaVirtual() {
       console.error('Error al realizar checkout público:', err)
       setCheckoutError(err.message || 'Ocurrió un error al enviar tu pedido. Intenta nuevamente.')
     } finally {
+      checkoutSubmittingRef.current = false
       setCheckoutSubmitting(false)
     }
   }
@@ -673,8 +689,8 @@ export default function PublicTiendaVirtual() {
                 style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} 
               />
             ) : (
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', boxShadow: '0 4px 12px rgba(220,38,38,0.3)' }}>
-                🥩
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #160d0b 0%, #2a1814 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(220,38,38,0.25)', border: '1px solid rgba(220,38,38,0.3)' }}>
+                <BrandLogoSvg style={{ width: 28, height: 28 }} />
               </div>
             )}
             <div>
@@ -734,8 +750,9 @@ export default function PublicTiendaVirtual() {
         {/* Banner Hero Comercial */}
         <div 
           className="tienda-hero animate-fade-in"
-          style={storeCover ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.82), rgba(15,23,42,0.92)), url(${storeCover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+          style={storeCover ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.82), rgba(15,23,42,0.92)), url(${storeCover})`, backgroundSize: 'cover', backgroundPosition: 'center', position: 'relative', overflow: 'hidden' } : { position: 'relative', overflow: 'hidden' }}
         >
+          <BrandWatermark size={200} opacity={0.06} style={{ right: '20px', bottom: '-20px', transform: 'rotate(-12deg)' }} />
           <div className="tienda-hero-content">
             <div className="tienda-hero-badge">
               <SparklesIcon style={{ width: 14, height: 14 }} /> {storeBusinessType}
@@ -1039,22 +1056,20 @@ export default function PublicTiendaVirtual() {
               Cargando cortes frescos del inventario...
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px', borderRadius: '18px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '12px' }}>🔍</div>
-              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>
-                No encontramos productos que coincidan
-              </h3>
-              <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '400px', margin: '0 auto 16px' }}>
-                Intenta con otros términos de búsqueda o cambia la categoría seleccionada.
-              </p>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => { setSearchQuery(''); setSelectedCategory('Todas'); setOnlyInStock(false); }}
-              >
-                Limpiar Filtros
-              </button>
-            </div>
+            <EmptyState 
+              icon="🔍" 
+              title="No encontramos productos que coincidan" 
+              subtitle="Intenta con otros términos de búsqueda o cambia la categoría seleccionada para explorar el inventario."
+              actionButton={
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setSearchQuery(''); setSelectedCategory('Todas'); setOnlyInStock(false); }}
+                >
+                  Limpiar Filtros
+                </button>
+              }
+            />
           ) : (
             <div className="tienda-products-grid">
               {filteredProducts.map(product => {

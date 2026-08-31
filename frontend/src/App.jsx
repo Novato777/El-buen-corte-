@@ -40,7 +40,10 @@ import {
   StarIcon,
   SlidersIcon,
   ShoppingBagIcon,
-  BellIcon
+  BellIcon,
+  BrandLogoSvg,
+  BrandWatermark,
+  EmptyState
 } from './Icons'
 import PublicTiendaVirtual from './PublicTiendaVirtual'
 import { 
@@ -56,6 +59,7 @@ import {
   KG_TO_LB,
   LB_TO_KG
 } from './utils/units'
+import { getIdempotencyHeaders } from './utils/idempotency'
 
 // Helper for formatting currencies
 const formatCOP = (val) => {
@@ -289,6 +293,7 @@ function App() {
     notas: ''
   })
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
+  const checkoutSubmittingRef = useRef(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [orderSuccessData, setOrderSuccessData] = useState(null)
 
@@ -296,6 +301,7 @@ function App() {
   const [orderToCharge, setOrderToCharge] = useState(null)
   const [chargePaymentMethod, setChargePaymentMethod] = useState('Efectivo')
   const [chargeLoading, setChargeLoading] = useState(false)
+  const chargeLoadingRef = useRef(false)
   const [selectedOrderDetail, setSelectedOrderDetail] = useState(null)
 
   // Carrusel de Sugerencias
@@ -387,7 +393,8 @@ function App() {
   }
 
   const handleCheckoutSubmit = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (checkoutSubmittingRef.current || checkoutSubmitting) return
     if (!checkoutForm.cliente.trim()) {
       setCheckoutError('Por favor ingresa el nombre del cliente o solicitante.')
       return
@@ -406,6 +413,7 @@ function App() {
       }
     }
 
+    checkoutSubmittingRef.current = true
     setCheckoutSubmitting(true)
     setCheckoutError('')
 
@@ -420,7 +428,7 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/pedidos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify(orderPayload)
       })
 
@@ -447,6 +455,7 @@ function App() {
       console.error('Error al realizar checkout:', err)
       setCheckoutError(err.message || 'Ocurrió un error al enviar tu pedido. Intenta nuevamente.')
     } finally {
+      checkoutSubmittingRef.current = false
       setCheckoutSubmitting(false)
     }
   }
@@ -510,7 +519,27 @@ function App() {
   const [posClientName, setPosClientName] = useState('Cliente Mostrador')
   const [posCashReceived, setPosCashReceived] = useState('')
   const [posSubmitting, setPosSubmitting] = useState(false)
+  const posSubmittingRef = useRef(false)
   const [posSelectedOrder, setPosSelectedOrder] = useState(null)
+
+  // Candados síncronos y estados de envío (Anti Double-Submit)
+  const [addIncomeSubmitting, setAddIncomeSubmitting] = useState(false)
+  const addIncomeSubmittingRef = useRef(false)
+  const [addExpenseSubmitting, setAddExpenseSubmitting] = useState(false)
+  const addExpenseSubmittingRef = useRef(false)
+  const [addProductSubmitting, setAddProductSubmitting] = useState(false)
+  const addProductSubmittingRef = useRef(false)
+  const [addStockSubmitting, setAddStockSubmitting] = useState(false)
+  const addStockSubmittingRef = useRef(false)
+  const [addMermaSubmitting, setAddMermaSubmitting] = useState(false)
+  const addMermaSubmittingRef = useRef(false)
+  const [createOrderSubmitting, setCreateOrderSubmitting] = useState(false)
+  const createOrderSubmittingRef = useRef(false)
+  const [saveSimSubmitting, setSaveSimSubmitting] = useState(false)
+  const saveSimSubmittingRef = useRef(false)
+  const [saveProfileSubmitting, setSaveProfileSubmitting] = useState(false)
+  const saveProfileSubmittingRef = useRef(false)
+  const discountLoadingRef = useRef(false)
 
   // Descuentos en productos
   const [showDiscountModal, setShowDiscountModal] = useState(false)
@@ -1132,7 +1161,8 @@ function App() {
 
   // Handle new product creation
   const handleCreateProduct = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (addProductSubmittingRef.current || addProductSubmitting) return
     if (!newProdName.trim() || newProdPrice <= 0) return
 
     const body = {
@@ -1146,10 +1176,13 @@ function App() {
       unidadMedida: normalizeUnit(newProdUnit)
     }
 
+    addProductSubmittingRef.current = true
+    setAddProductSubmitting(true)
+
     try {
       const res = await fetch(`${API_BASE}/inventario`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify(body)
       })
       if (!res.ok) {
@@ -1165,6 +1198,9 @@ function App() {
         ...body
       }
       setInventario([...inventario, newProduct])
+    } finally {
+      addProductSubmittingRef.current = false
+      setAddProductSubmitting(false)
     }
 
     // Reset form
@@ -1208,7 +1244,8 @@ function App() {
 
   // Handle new order creation
   const handleCreateOrder = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (createOrderSubmittingRef.current || createOrderSubmitting) return
     if (!newOrderClient.trim()) return
 
     const items = newOrderItems.map(oi => ({
@@ -1216,10 +1253,13 @@ function App() {
       cantidad: Number(oi.cantidad)
     }))
 
+    createOrderSubmittingRef.current = true
+    setCreateOrderSubmitting(true)
+
     try {
       await fetch(`${API_BASE}/pedidos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ cliente: newOrderClient, items })
       })
       await loadData()
@@ -1229,9 +1269,9 @@ function App() {
         const prod = inventario.find(i => i.id === oi.productoId)
         return {
           productoId: oi.productoId,
-          nombre: prod.nombre,
+          nombre: prod?.nombre || 'Corte',
           cantidad: Number(oi.cantidad),
-          precio: prod.precioVenta
+          precio: prod?.precioVenta || 0
         }
       })
       const total = fullItems.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
@@ -1252,6 +1292,9 @@ function App() {
         }
         return prod
       }))
+    } finally {
+      createOrderSubmittingRef.current = false
+      setCreateOrderSubmitting(false)
     }
 
     // Reset form
@@ -1287,11 +1330,14 @@ function App() {
   }
 
   const handleDeliverOrder = async (orderId, paymentMethod = 'Efectivo') => {
+    if (chargeLoadingRef.current || chargeLoading) return
+    chargeLoadingRef.current = true
     setChargeLoading(true)
+
     try {
       const res = await fetch(`${API_BASE}/pedidos/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ 
           estado: 'Entregado',
           metodoPago: paymentMethod
@@ -1300,7 +1346,6 @@ function App() {
       if (!res.ok) throw new Error('Error al registrar cobro y entrega del pedido')
       await loadData()
       setPosSelectedOrder(null)
-      setOrderToCharge(null)
       setShowAddIncomeModal(false)
       alert(`✅ ¡Pedido ${orderId} cobrado (${paymentMethod}) y entregado exitosamente!\n\nLa venta se registró como Ingreso en Contabilidad y se actualizó el saldo de caja.`)
     } catch (err) {
@@ -1323,10 +1368,10 @@ function App() {
       })
       setPedidos(updatedPedidos)
       setPosSelectedOrder(null)
-      setOrderToCharge(null)
       setShowAddIncomeModal(false)
       alert(`✅ ¡Pedido ${orderId} cobrado (${paymentMethod}) y entregado (Modo local)!`)
     } finally {
+      chargeLoadingRef.current = false
       setChargeLoading(false)
     }
   }
@@ -1336,7 +1381,7 @@ function App() {
     try {
       await fetch(`${API_BASE}/pedidos/${orderId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ estado: 'Cancelado' })
       })
       await loadData()
@@ -1361,12 +1406,18 @@ function App() {
 
   // Add stock handling
   const handleAddStock = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (addStockSubmittingRef.current || addStockSubmitting) return
     const prod = inventario.find(i => i.id === newStockProduct)
+    if (!prod) return
+
+    addStockSubmittingRef.current = true
+    setAddStockSubmitting(true)
+
     try {
       await fetch(`${API_BASE}/inventario/abastecer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ productoId: newStockProduct, cantidad: Number(newStockWeight) })
       })
       await loadData()
@@ -1387,18 +1438,27 @@ function App() {
         fecha: new Date().toLocaleTimeString('es-CO', {hour: '2-digit', minute:'2-digit'})
       }
       setTransacciones(prev => [newTrx, ...prev])
+    } finally {
+      addStockSubmittingRef.current = false
+      setAddStockSubmitting(false)
     }
     setShowAddStockModal(false)
   }
 
   // Record Merma handling
   const handleAddMerma = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (addMermaSubmittingRef.current || addMermaSubmitting) return
     const prod = inventario.find(i => i.id === newMermaProduct)
+    if (!prod) return
+
+    addMermaSubmittingRef.current = true
+    setAddMermaSubmitting(true)
+
     try {
       await fetch(`${API_BASE}/inventario/mermas`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ productoId: newMermaProduct, peso: Number(newMermaWeight), motivo: newMermaReason })
       })
       await loadData()
@@ -1418,6 +1478,9 @@ function App() {
         fecha: new Date().toLocaleDateString('es-CO')
       }
       setMermas([newMerma, ...mermas])
+    } finally {
+      addMermaSubmittingRef.current = false
+      setAddMermaSubmitting(false)
     }
     setShowAddMermaModal(false)
     setNewMermaWeight(1.0)
@@ -1426,12 +1489,17 @@ function App() {
 
   // Record manual expense
   const handleAddExpense = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (addExpenseSubmittingRef.current || addExpenseSubmitting) return
     if (!newExpenseDesc.trim() || newExpenseAmount <= 0) return
+
+    addExpenseSubmittingRef.current = true
+    setAddExpenseSubmitting(true)
+
     try {
       await fetch(`${API_BASE}/transacciones/egreso`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ 
           descripcion: newExpenseDesc, 
           monto: Number(newExpenseAmount),
@@ -1452,6 +1520,9 @@ function App() {
       }
       setTransacciones(prev => [newTrx, ...prev])
       alert('¡Egreso registrado correctamente (Modo local)!')
+    } finally {
+      addExpenseSubmittingRef.current = false
+      setAddExpenseSubmitting(false)
     }
     setShowAddExpenseModal(false)
     setNewExpenseDesc('')
@@ -1469,14 +1540,16 @@ function App() {
   const handleSaveDiscount = async (e) => {
     if (e) e.preventDefault()
     if (!discountProduct) return
+    if (discountLoadingRef.current || discountLoading) return
 
     const numDescuento = Math.max(0, Math.min(100, Number(discountPercent) || 0))
+    discountLoadingRef.current = true
     setDiscountLoading(true)
 
     try {
       const res = await fetch(`${API_BASE}/inventario/${discountProduct.id}/descuento`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ descuento: numDescuento })
       })
 
@@ -1498,6 +1571,7 @@ function App() {
       alert(`✅ ¡Descuento de ${numDescuento}% guardado (Modo local) para "${discountProduct.nombre}"!`)
       setShowDiscountModal(false)
     } finally {
+      discountLoadingRef.current = false
       setDiscountLoading(false)
     }
   }
@@ -1582,6 +1656,7 @@ function App() {
 
   const handleConfirmPosSale = async (e) => {
     if (e) e.preventDefault()
+    if (posSubmittingRef.current || posSubmitting) return
     if (posCart.length === 0) {
       alert('⚠️ La venta no tiene productos agregados. Selecciona y agrega al menos un corte.')
       return
@@ -1591,6 +1666,7 @@ function App() {
     const posCashNum = parseFormattedNumber(posCashReceived) || 0
     const posChange = posCashNum >= posTotal ? posCashNum - posTotal : 0
 
+    posSubmittingRef.current = true
     setPosSubmitting(true)
     const itemsPayload = posCart.map(item => ({
       productoId: item.productoId,
@@ -1612,7 +1688,7 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/transacciones/ingreso`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify(body)
       })
 
@@ -1658,18 +1734,24 @@ function App() {
       setPosClientName('Cliente Mostrador')
       setShowAddIncomeModal(false)
     } finally {
+      posSubmittingRef.current = false
       setPosSubmitting(false)
     }
   }
 
   // Record manual income
   const handleAddIncome = async (e) => {
-    e.preventDefault()
+    if (e) e.preventDefault()
+    if (addIncomeSubmittingRef.current || addIncomeSubmitting) return
     if (!newIncomeDesc.trim() || newIncomeAmount <= 0) return
+
+    addIncomeSubmittingRef.current = true
+    setAddIncomeSubmitting(true)
+
     try {
       const res = await fetch(`${API_BASE}/transacciones/ingreso`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({ 
           descripcion: newIncomeDesc, 
           monto: Number(newIncomeAmount),
@@ -1692,6 +1774,9 @@ function App() {
       }
       setTransacciones(prev => [newTrx, ...prev])
       alert('¡Ingreso registrado correctamente (Modo local)!')
+    } finally {
+      addIncomeSubmittingRef.current = false
+      setAddIncomeSubmitting(false)
     }
     setShowAddIncomeModal(false)
     setNewIncomeDesc('')
@@ -1916,6 +2001,7 @@ function App() {
   // Save Business Profile changes
   const handleSaveProfile = async (e) => {
     if (e) e.preventDefault()
+    if (saveProfileSubmittingRef.current || saveProfileSubmitting) return
     
     // Validations
     if (!profileForm.general?.nombre?.trim()) {
@@ -1931,10 +2017,13 @@ function App() {
       return
     }
     
+    saveProfileSubmittingRef.current = true
+    setSaveProfileSubmitting(true)
+
     try {
       const response = await fetch(`${API_BASE}/business-profile`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify(profileForm)
       })
       if (!response.ok) {
@@ -1967,6 +2056,9 @@ function App() {
       setProfileData(profileForm)
       localStorage.setItem('el_buen_corte_profile', JSON.stringify(profileForm))
       alert("✅ Los cambios se guardaron localmente.")
+    } finally {
+      saveProfileSubmittingRef.current = false
+      setSaveProfileSubmitting(false)
     }
   }
 
@@ -2104,10 +2196,14 @@ function App() {
 
   // Save Calculator simulation
   const handleSaveSimulation = async () => {
+    if (saveSimSubmittingRef.current || saveSimSubmitting) return
+    saveSimSubmittingRef.current = true
+    setSaveSimSubmitting(true)
+
     try {
       await fetch(`${API_BASE}/simulaciones`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...getIdempotencyHeaders() },
         body: JSON.stringify({
           pesoPie: calcPesoPie,
           costoTotal: costTotalAnimal,
@@ -2127,6 +2223,9 @@ function App() {
         realCostoKg: realCostPerKgMeat
       }
       setSavedSimulations([newSim, ...savedSimulations])
+    } finally {
+      saveSimSubmittingRef.current = false
+      setSaveSimSubmitting(false)
     }
   }
 
@@ -2295,7 +2394,9 @@ function App() {
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="brand-section">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="brand-icon">🥩</div>
+            <div className="brand-icon">
+              <BrandLogoSvg style={{ width: '24px', height: '24px' }} />
+            </div>
             <div className="brand-name">
               El Buen Corte
               <span>Dashboard</span>
@@ -2581,6 +2682,7 @@ function App() {
               {/* Metrics cards */}
               <div className="grid-metrics">
                 <div className="card metric-card card-tint-blue">
+                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
                   <div className="card-title">Ventas del Día <span className="nav-icon"><DollarIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-blue)' }}>{formatCOP(totalVentasHoy)}</div>
                   <div className="metric-footer">
@@ -2590,6 +2692,7 @@ function App() {
                 </div>
 
                 <div className="card metric-card card-tint-gold">
+                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
                   <div className="card-title">Pedidos Activos <span className="nav-icon"><ClipboardIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-gold)' }}>{pedidosPendientesCount}</div>
                   <div className="metric-footer">
@@ -2599,6 +2702,7 @@ function App() {
                 </div>
 
                 <div className="card metric-card card-tint-red">
+                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
                   <div className="card-title">Egresos Hoy <span className="nav-icon"><DollarIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-red)' }}>{formatCOP(totalEgresosHoy)}</div>
                   <div className="metric-footer">
@@ -2608,6 +2712,7 @@ function App() {
                 </div>
 
                 <div className="card metric-card card-tint-green">
+                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
                   <div className="card-title">Saldo Efectivo Caja <span className="nav-icon"><BoxIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-green)' }}>{formatCOP(saldoCajaActual)}</div>
                   <div className="metric-footer">
@@ -2622,8 +2727,9 @@ function App() {
                 {/* Column Left: Actions and lists */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   <div className="card">
+                    <BrandWatermark size={130} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-red)' }}><BoltIcon /></div>
-                    <h3 className="card-title" style={{ color: 'var(--text-primary)', fontSize: '18px', marginBottom: '20px' }}>
+                    <h3 className="card-title" style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '18px' }}>
                       Acciones Rápidas
                     </h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
@@ -2655,6 +2761,7 @@ function App() {
                   </div>
 
                   <div className="card">
+                    <BrandWatermark size={130} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-gold)' }}><ClockIcon /></div>
                     <div className="card-title">
                       Pedidos Pendientes Recientes
@@ -2664,9 +2771,12 @@ function App() {
                     </div>
                     
                     {pedidos.filter(p => p.estado === 'Pendiente').length === 0 ? (
-                      <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '16px 0' }}>
-                        No hay pedidos pendientes. ¡Todo al día! 🎉
-                      </p>
+                      <EmptyState 
+                        icon="🎉" 
+                        title="Todo al día" 
+                        subtitle="No hay pedidos pendientes por entregar en este momento." 
+                        compact={true} 
+                      />
                     ) : (
                       <div className="table-container">
                         <table className="data-table">
@@ -2702,12 +2812,16 @@ function App() {
 
                 {/* Column Right: Recent Activity Log */}
                 <div className="card" style={{ height: '100%' }}>
+                  <BrandWatermark size={140} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Transacciones del Turno</h3>
                   {transacciones.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '24px 0' }}>
-                      Ninguna transacción registrada en el turno actual.
-                    </p>
+                    <EmptyState 
+                      icon="💸" 
+                      title="Sin movimientos hoy" 
+                      subtitle="Las ventas y egresos asentados aparecerán en este registro cronológico." 
+                      compact={true} 
+                    />
                   ) : (
                     <div className="activity-list">
                       {transacciones.map(trx => (
@@ -2776,132 +2890,153 @@ function App() {
               </div>
 
               <div className="card">
-                <div className="table-container table-scrollable">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Código</th>
-                        <th>Cliente</th>
-                        <th>Fecha</th>
-                        <th>Cortes Solicitados</th>
-                        <th>Total</th>
-                        <th>Estado</th>
-                        <th style={{ textAlign: 'right' }}>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pedidos
-                        .filter(p => orderFilter === 'Todos' || p.estado === orderFilter)
-                        .map(p => (
-                          <tr key={p.id}>
-                            <td style={{ fontWeight: '700' }}>{p.id}</td>
-                            <td style={{ fontWeight: '600' }}>{p.cliente}</td>
-                            <td>{p.fecha}</td>
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                {p.items.map((i, idx) => (
-                                  <span key={idx} style={{ fontSize: '13px' }}>
-                                    • {i.cantidad} kg de <strong>{i.nombre}</strong>
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                            <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCOP(p.total)}</td>
-                            <td>
-                              <span className={`badge ${
-                                p.estado === 'Pendiente' ? 'badge-pending' : 
-                                p.estado === 'Entregado' ? 'badge-success' : 'badge-danger'
-                              }`}>
-                                {p.estado}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                <button 
-                                  type="button"
-                                  style={{ 
-                                    padding: '5px 12px', 
-                                    fontSize: '11.5px', 
-                                    fontWeight: '700', 
-                                    borderRadius: '20px',
-                                    background: '#f8fafc',
-                                    border: '1px solid #cbd5e1',
-                                    color: '#334155',
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    gap: '5px',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s ease',
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                                  }} 
-                                  onClick={() => setSelectedOrderDetail(p)}
-                                  title="Ver qué pidió el cliente para preparar y despachar"
-                                >
-                                  👁️ Ver Pedido
-                                </button>
-                                {p.estado === 'Pendiente' && (
-                                  <>
-                                    <button 
-                                      type="button"
-                                      style={{ 
-                                        padding: '5px 14px', 
-                                        fontSize: '11.5px', 
-                                        fontWeight: '700',
-                                        borderRadius: '20px',
-                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                                        border: 'none', 
-                                        color: '#ffffff', 
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '5px',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.15s ease',
-                                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.28)'
-                                      }} 
-                                      onClick={() => handleOpenChargeOrderModal(p)}
-                                      title="Cobrar pedido y registrar venta en contabilidad"
-                                    >
-                                      💳 Cobrar & Entregar
-                                    </button>
-                                    <button 
-                                      type="button"
-                                      style={{ 
-                                        padding: '5px 11px', 
-                                        fontSize: '11.5px',
-                                        fontWeight: '700',
-                                        borderRadius: '20px',
-                                        background: '#fef2f2',
-                                        border: '1px solid #fecaca',
-                                        color: '#dc2626',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.15s ease'
-                                      }} 
-                                      onClick={() => handleCancelOrder(p.id)}
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </>
-                                )}
-                                {p.estado === 'Entregado' && (
-                                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#059669', background: '#ecfdf5', padding: '4px 10px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
-                                    ✓ Pagado en caja
-                                  </span>
-                                )}
-                                {p.estado === 'Cancelado' && (
-                                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
-                                    ✕ Pedido anulado
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <BrandWatermark size={150} opacity={0.03} style={{ right: '20px', bottom: '20px', transform: 'rotate(-10deg)' }} />
+                {pedidos.filter(p => orderFilter === 'Todos' || p.estado === orderFilter).length === 0 ? (
+                  <EmptyState 
+                    icon="📋" 
+                    title={orderFilter === 'Todos' ? "No hay pedidos registrados" : `No hay pedidos ${orderFilter.toLowerCase()}s`} 
+                    subtitle={orderFilter === 'Todos' ? "Crea un nuevo pedido para clientes de mostrador o espera pedidos entrantes desde la tienda virtual." : `No se encontraron pedidos con el estado "${orderFilter}".`}
+                    actionButton={
+                      <button 
+                        className="btn btn-primary"
+                        onClick={() => {
+                          if(!isCajaAbierta) { alert('Abre la caja antes de registrar pedidos.'); return; }
+                          setShowAddOrderModal(true)
+                        }}
+                      >
+                        <PlusIcon /> Crear Nuevo Pedido
+                      </button>
+                    }
+                  />
+                ) : (
+                  <div className="table-container table-scrollable">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Código</th>
+                          <th>Cliente</th>
+                          <th>Fecha</th>
+                          <th>Cortes Solicitados</th>
+                          <th>Total</th>
+                          <th>Estado</th>
+                          <th style={{ textAlign: 'right' }}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedidos
+                          .filter(p => orderFilter === 'Todos' || p.estado === orderFilter)
+                          .map(p => (
+                            <tr key={p.id}>
+                              <td style={{ fontWeight: '700' }}>{p.id}</td>
+                              <td style={{ fontWeight: '600' }}>{p.cliente}</td>
+                              <td style={{ color: 'var(--text-muted)' }}>{p.fecha}</td>
+                              <td>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  {p.items.map((i, idx) => (
+                                    <span key={idx} style={{ fontSize: '13px' }}>
+                                      • {formatStockDisplay(i.cantidad, i.unidad || 'kg')} de <strong>{i.nombre}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCOP(p.total)}</td>
+                              <td>
+                                <span className={`badge ${
+                                  p.estado === 'Pendiente' ? 'badge-pending' : 
+                                  p.estado === 'Entregado' ? 'badge-success' : 'badge-danger'
+                                }`}>
+                                  <span className="badge-dot" />
+                                  {p.estado}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                  <button 
+                                    type="button" 
+                                    style={{ 
+                                      padding: '5px 12px', 
+                                      fontSize: '11.5px', 
+                                      fontWeight: '700', 
+                                      borderRadius: '20px',
+                                      background: '#f8fafc',
+                                      border: '1px solid #cbd5e1',
+                                      color: '#334155',
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '5px',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.15s ease',
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                    }} 
+                                    onClick={() => setSelectedOrderDetail(p)}
+                                    title="Ver qué pidió el cliente para preparar y despachar"
+                                  >
+                                    👁️ Ver Pedido
+                                  </button>
+                                  {p.estado === 'Pendiente' && (
+                                    <>
+                                      <button 
+                                        type="button" 
+                                        style={{ 
+                                          padding: '5px 14px', 
+                                          fontSize: '11.5px', 
+                                          fontWeight: '700',
+                                          borderRadius: '20px',
+                                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                                          border: 'none', 
+                                          color: '#ffffff', 
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease',
+                                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.28)'
+                                        }} 
+                                        onClick={() => handleOpenChargeOrderModal(p)}
+                                        title="Cobrar pedido y registrar venta en contabilidad"
+                                      >
+                                        💳 Cobrar & Entregar
+                                      </button>
+                                      <button 
+                                        type="button" 
+                                        style={{ 
+                                          padding: '5px 11px', 
+                                          fontSize: '11.5px', 
+                                          fontWeight: '700',
+                                          borderRadius: '20px',
+                                          background: '#fef2f2',
+                                          border: '1px solid #fecaca',
+                                          color: '#dc2626',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease'
+                                        }} 
+                                        onClick={() => handleCancelOrder(p.id)}
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </>
+                                  )}
+                                  {p.estado === 'Entregado' && (
+                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#059669', background: '#ecfdf5', padding: '4px 10px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
+                                      ✓ Pagado en caja
+                                    </span>
+                                  )}
+                                  {p.estado === 'Cancelado' && (
+                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+                                      ✕ Pedido anulado
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2939,12 +3074,16 @@ function App() {
                 {/* Product Cards Grid */}
                 <div>
                   {filteredInventario.length === 0 ? (
-                    <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-                      <p style={{ color: 'var(--text-muted)' }}>No hay productos en esta categoría.</p>
-                      <button className="btn btn-secondary" style={{ marginTop: '12px' }} onClick={() => setShowAddProductModal(true)}>
-                        Agregar Primer Producto
-                      </button>
-                    </div>
+                    <EmptyState 
+                      icon="🥩" 
+                      title={inventoryFilter === 'Todos' ? "No hay productos en inventario" : `No hay productos en "${inventoryFilter}"`} 
+                      subtitle="Agrega nuevos cortes de carne o ajusta el filtro de categoría para visualizar los productos."
+                      actionButton={
+                        <button className="btn btn-primary" onClick={() => setShowAddProductModal(true)}>
+                          <PlusIcon /> Agregar Producto
+                        </button>
+                      }
+                    />
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
                       {filteredInventario.map(item => {
@@ -3267,8 +3406,17 @@ function App() {
                   )}
 
                   <div style={{ marginTop: '24px' }}>
-                    <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleSaveSimulation}>
-                      <CheckIcon /> Guardar Simulación
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ 
+                        width: '100%', 
+                        opacity: saveSimSubmitting ? 0.65 : 1, 
+                        cursor: saveSimSubmitting ? 'not-allowed' : 'pointer' 
+                      }} 
+                      onClick={handleSaveSimulation}
+                      disabled={saveSimSubmitting}
+                    >
+                      {saveSimSubmitting ? '⏳ Guardando Simulación...' : <><CheckIcon /> Guardar Simulación</>}
                     </button>
                   </div>
                 </div>
@@ -3502,56 +3650,79 @@ function App() {
 
                 {/* Right side: transaction log list */}
                 <div className="card">
+                  <BrandWatermark size={150} opacity={0.03} style={{ right: '20px', bottom: '20px', transform: 'rotate(-10deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Historial de Transacciones del Turno</h3>
-                  <div className="table-container table-scrollable">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Código</th>
-                          <th>Descripción</th>
-                          <th>Hora/Fecha</th>
-                          <th>Tipo</th>
-                          <th>Método de Pago</th>
-                          <th style={{ textAlign: 'right' }}>Monto</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {transacciones.map(t => (
-                          <tr key={t.id}>
-                            <td style={{ fontWeight: '700' }}>{t.id}</td>
-                            <td style={{ fontWeight: '500' }}>{t.descripcion}</td>
-                            <td style={{ color: 'var(--text-muted)' }}>{t.fecha}</td>
-                            <td>
-                              <span className={`badge ${t.tipo === 'Ingreso' ? 'badge-success' : 'badge-danger'}`}>
-                                {t.tipo}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="payment-method-badge" style={{ 
-                                backgroundColor: t.tipo === 'Ingreso' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
-                                color: t.tipo === 'Ingreso' ? '#059669' : '#dc2626',
-                                padding: '4px 8px', 
-                                borderRadius: '6px',
-                                fontSize: '11.5px',
-                                fontWeight: '600',
-                                border: t.tipo === 'Ingreso' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)'
-                              }}>
-                                {t.metodoPago || 'Efectivo'}
-                              </span>
-                            </td>
-                            <td style={{ 
-                              textAlign: 'right', 
-                              fontWeight: '700',
-                              color: t.tipo === 'Ingreso' ? 'var(--accent-green)' : 'var(--accent-red)'
-                            }}>
-                              {t.tipo === 'Ingreso' ? '+' : '-'}{formatCOP(t.monto)}
-                            </td>
+                  {transacciones.length === 0 ? (
+                    <EmptyState 
+                      icon="💸" 
+                      title="No hay transacciones en este turno" 
+                      subtitle="Registra una venta de mostrador, ingreso o egreso de caja para comenzar el flujo del turno."
+                      actionButton={
+                        <button 
+                          className="btn btn-primary"
+                          onClick={() => {
+                            if(!isCajaAbierta) { alert('Abre la caja antes de registrar ventas.'); return; }
+                            setIncomeMode('pos')
+                            setShowAddIncomeModal(true)
+                          }}
+                          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#059669' }}
+                        >
+                          <PlusIcon /> 🛒 Registrar Venta POS
+                        </button>
+                      }
+                    />
+                  ) : (
+                    <div className="table-container table-scrollable">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Código</th>
+                            <th>Descripción</th>
+                            <th>Hora/Fecha</th>
+                            <th>Tipo</th>
+                            <th>Método de Pago</th>
+                            <th style={{ textAlign: 'right' }}>Monto</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {transacciones.map(t => (
+                            <tr key={t.id}>
+                              <td style={{ fontWeight: '700' }}>{t.id}</td>
+                              <td style={{ fontWeight: '500' }}>{t.descripcion}</td>
+                              <td style={{ color: 'var(--text-muted)' }}>{t.fecha}</td>
+                              <td>
+                                <span className={`badge ${t.tipo === 'Ingreso' ? 'badge-success' : 'badge-danger'}`}>
+                                  <span className="badge-dot" />
+                                  {t.tipo}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="payment-method-badge" style={{ 
+                                  backgroundColor: t.tipo === 'Ingreso' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                                  color: t.tipo === 'Ingreso' ? '#059669' : '#dc2626',
+                                  padding: '4px 8px', 
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: '600',
+                                  border: t.tipo === 'Ingreso' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)'
+                                }}>
+                                  {t.metodoPago || 'Efectivo'}
+                                </span>
+                              </td>
+                              <td style={{ 
+                                textAlign: 'right', 
+                                fontWeight: '700',
+                                color: t.tipo === 'Ingreso' ? 'var(--accent-green)' : 'var(--accent-red)'
+                              }}>
+                                {t.tipo === 'Ingreso' ? '+' : '-'}{formatCOP(t.monto)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -4226,8 +4397,16 @@ function App() {
                       </div>
 
                       <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-primary" onClick={handleSaveProfile}>
-                          💾 Guardar Sección
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={handleSaveProfile}
+                          disabled={saveProfileSubmitting}
+                          style={{ 
+                            opacity: saveProfileSubmitting ? 0.65 : 1, 
+                            cursor: saveProfileSubmitting ? 'not-allowed' : 'pointer' 
+                          }}
+                        >
+                          {saveProfileSubmitting ? '⏳ Guardando Sección...' : '💾 Guardar Sección'}
                         </button>
                       </div>
                     </div>
@@ -4300,8 +4479,16 @@ function App() {
                       </div>
 
                       <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-primary" onClick={handleSaveProfile}>
-                          💾 Guardar Sección
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={handleSaveProfile}
+                          disabled={saveProfileSubmitting}
+                          style={{ 
+                            opacity: saveProfileSubmitting ? 0.65 : 1, 
+                            cursor: saveProfileSubmitting ? 'not-allowed' : 'pointer' 
+                          }}
+                        >
+                          {saveProfileSubmitting ? '⏳ Guardando Sección...' : '💾 Guardar Sección'}
                         </button>
                       </div>
                     </div>
@@ -5163,21 +5350,30 @@ function App() {
               </div>
 
               <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddOrderModal(false)} style={{ padding: '10px 18px', borderRadius: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowAddOrderModal(false)} 
+                  disabled={createOrderSubmitting}
+                  style={{ padding: '10px 18px', borderRadius: '10px' }}
+                >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
                   className="btn btn-primary"
+                  disabled={createOrderSubmitting}
                   style={{ 
                     padding: '10px 22px', 
                     borderRadius: '10px',
                     fontWeight: '800',
                     background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)'
+                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+                    opacity: createOrderSubmitting ? 0.65 : 1,
+                    cursor: createOrderSubmitting ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  ✓ Registrar Pedido
+                  {createOrderSubmitting ? '⏳ Guardando Pedido...' : '✓ Registrar Pedido'}
                 </button>
               </div>
             </form>
@@ -5189,7 +5385,7 @@ function App() {
       {/* MODAL: ABASTECER INVENTARIO */}
       {/* ================================================================= */}
       {showAddStockModal && (
-        <div className="modal-overlay" onClick={() => setShowAddStockModal(false)}>
+        <div className="modal-overlay" onClick={() => !addStockSubmitting && setShowAddStockModal(false)}>
           <form 
             className="modal-card animate-fade-in" 
             onSubmit={handleAddStock}
@@ -5224,11 +5420,12 @@ function App() {
               <button 
                 type="button" 
                 onClick={() => setShowAddStockModal(false)}
+                disabled={addStockSubmitting}
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
-                  width: '32px',
-                  height: '32px',
+                  width: '32px', 
+                  height: '32px', 
                   borderRadius: '50%', 
                   fontSize: '14px', 
                   cursor: 'pointer', 
@@ -5297,8 +5494,25 @@ function App() {
             </div>
 
             <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddStockModal(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-success">✓ Abastecer Corte</button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowAddStockModal(false)}
+                disabled={addStockSubmitting}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-success"
+                disabled={addStockSubmitting}
+                style={{ 
+                  opacity: addStockSubmitting ? 0.65 : 1, 
+                  cursor: addStockSubmitting ? 'not-allowed' : 'pointer' 
+                }}
+              >
+                {addStockSubmitting ? '⏳ Abasteciendo...' : '✓ Abastecer Corte'}
+              </button>
             </div>
           </form>
         </div>
@@ -5480,7 +5694,7 @@ function App() {
       {/* MODAL: REGISTRAR MERMA */}
       {/* ================================================================= */}
       {showAddMermaModal && (
-        <div className="modal-overlay" onClick={() => setShowAddMermaModal(false)}>
+        <div className="modal-overlay" onClick={() => !addMermaSubmitting && setShowAddMermaModal(false)}>
           <form 
             className="modal-card animate-fade-in" 
             onSubmit={handleAddMerma}
@@ -5515,6 +5729,7 @@ function App() {
               <button 
                 type="button" 
                 onClick={() => setShowAddMermaModal(false)}
+                disabled={addMermaSubmitting}
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
@@ -5596,8 +5811,25 @@ function App() {
             </div>
 
             <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddMermaModal(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-danger">✓ Asentar Merma</button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowAddMermaModal(false)}
+                disabled={addMermaSubmitting}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-danger"
+                disabled={addMermaSubmitting}
+                style={{ 
+                  opacity: addMermaSubmitting ? 0.65 : 1, 
+                  cursor: addMermaSubmitting ? 'not-allowed' : 'pointer' 
+                }}
+              >
+                {addMermaSubmitting ? '⏳ Asentando Merma...' : '✓ Asentar Merma'}
+              </button>
             </div>
           </form>
         </div>
@@ -5607,7 +5839,7 @@ function App() {
       {/* MODAL: REGISTRAR EGRESO */}
       {/* ================================================================= */}
       {showAddExpenseModal && (
-        <div className="modal-overlay" onClick={() => setShowAddExpenseModal(false)}>
+        <div className="modal-overlay" onClick={() => !addExpenseSubmitting && setShowAddExpenseModal(false)}>
           <form 
             className="modal-card animate-fade-in" 
             onSubmit={handleAddExpense}
@@ -5642,6 +5874,7 @@ function App() {
               <button 
                 type="button" 
                 onClick={() => setShowAddExpenseModal(false)}
+                disabled={addExpenseSubmitting}
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
@@ -5747,8 +5980,25 @@ function App() {
             </div>
 
             <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddExpenseModal(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary">✓ Asentar Egreso</button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowAddExpenseModal(false)}
+                disabled={addExpenseSubmitting}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                disabled={addExpenseSubmitting}
+                style={{ 
+                  opacity: addExpenseSubmitting ? 0.65 : 1, 
+                  cursor: addExpenseSubmitting ? 'not-allowed' : 'pointer' 
+                }}
+              >
+                {addExpenseSubmitting ? '⏳ Asentando Egreso...' : '✓ Asentar Egreso'}
+              </button>
             </div>
           </form>
         </div>
@@ -6590,8 +6840,29 @@ function App() {
                     </div>
 
                     <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                      <button type="button" className="btn btn-secondary" onClick={() => setShowAddIncomeModal(false)} style={{ padding: '8px 16px', fontSize: '12.5px' }}>Cancelar</button>
-                      <button type="submit" className="btn btn-success" style={{ padding: '8px 18px', fontSize: '12.5px', fontWeight: '800' }}>✓ Asentar Ingreso</button>
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        onClick={() => setShowAddIncomeModal(false)} 
+                        disabled={addIncomeSubmitting}
+                        style={{ padding: '8px 16px', fontSize: '12.5px' }}
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="btn btn-success" 
+                        disabled={addIncomeSubmitting}
+                        style={{ 
+                          padding: '8px 18px', 
+                          fontSize: '12.5px', 
+                          fontWeight: '800',
+                          opacity: addIncomeSubmitting ? 0.65 : 1,
+                          cursor: addIncomeSubmitting ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {addIncomeSubmitting ? '⏳ Asentando Ingreso...' : '✓ Asentar Ingreso'}
+                      </button>
                     </div>
                   </form>
                 )}
@@ -7107,19 +7378,30 @@ function App() {
 
             {/* Footer */}
             <div className="modal-footer" style={{ padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowAddProductModal(false)} style={{ padding: '8px 16px', fontSize: '12.5px' }}>Cancelar</button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowAddProductModal(false)} 
+                disabled={addProductSubmitting}
+                style={{ padding: '8px 16px', fontSize: '12.5px' }}
+              >
+                Cancelar
+              </button>
               <button 
                 type="submit" 
                 className="btn btn-primary"
+                disabled={addProductSubmitting || uploadingProdFoto}
                 style={{ 
                   padding: '8px 20px', 
                   fontSize: '12.5px', 
                   fontWeight: '800', 
                   background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)', 
-                  boxShadow: '0 3px 10px rgba(220, 38, 38, 0.3)' 
+                  boxShadow: '0 3px 10px rgba(220, 38, 38, 0.3)',
+                  opacity: (addProductSubmitting || uploadingProdFoto) ? 0.65 : 1,
+                  cursor: (addProductSubmitting || uploadingProdFoto) ? 'not-allowed' : 'pointer'
                 }}
               >
-                ✓ Guardar Producto
+                {addProductSubmitting ? '⏳ Guardando Producto...' : (uploadingProdFoto ? '⏳ Subiendo Foto...' : '✓ Guardar Producto')}
               </button>
             </div>
           </form>

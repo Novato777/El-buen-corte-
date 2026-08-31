@@ -273,5 +273,75 @@ export function BellIcon({ className = "h-5 w-5" }) {
   return <Bell className={className} strokeWidth={1.8} />
 }
 
+// 🥩 Logo Oficial del Negocio (Mismo vector del favicon)
+export function BrandLogoSvg({ className = "w-6 h-6", style = {} }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      viewBox="0 0 32 32" 
+      className={className} 
+      style={style}
+      aria-hidden="true"
+    >
+      <rect width="32" height="32" rx="7" fill="#160d0b" />
+      <path d="M9 19c0-3.9 3.1-7 7-7s7 3.1 7 7-3.1 6-7 6-7-2.1-7-6z" fill="#dc2626" />
+      <circle cx="13.5" cy="18" r="2.2" fill="#f3e9dc" />
+      <path d="M16 5c1.5 1.5 1.5 3 .6 4.2M19 6c1 1.3 1 2.6.2 3.6" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+    </svg>
+  )
+}
 
+// 🥩 Marca de agua sutil para fondos de cards, dashboards y estados vacíos
+export function BrandWatermark({ size = 120, opacity = 0.05, style = {}, className = "" }) {
+  return (
+    <div 
+      className={`brand-watermark-wrapper ${className}`}
+      style={{
+        position: 'absolute',
+        pointerEvents: 'none',
+        userSelect: 'none',
+        opacity: opacity,
+        zIndex: 0,
+        ...style
+      }}
+      aria-hidden="true"
+    >
+      <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        viewBox="0 0 32 32" 
+        width={size} 
+        height={size}
+      >
+        <rect width="32" height="32" rx="7" fill="#160d0b" />
+        <path d="M9 19c0-3.9 3.1-7 7-7s7 3.1 7 7-3.1 6-7 6-7-2.1-7-6z" fill="#dc2626" />
+        <circle cx="13.5" cy="18" r="2.2" fill="#f3e9dc" />
+        <path d="M16 5c1.5 1.5 1.5 3 .6 4.2M19 6c1 1.3 1 2.6.2 3.6" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+      </svg>
+    </div>
+  )
+}
 
+// 🥩 Contenedor estandarizado de estado vacío con identidad y marca de agua
+export function EmptyState({ 
+  icon = "🥩", 
+  title = "No hay registros", 
+  subtitle = "Todo está al día o no se encontraron elementos en esta sección.",
+  actionButton = null,
+  compact = false
+}) {
+  return (
+    <div className={`app-empty-state ${compact ? 'compact' : ''}`}>
+      <BrandWatermark size={compact ? 90 : 140} opacity={0.04} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-8deg)' }} />
+      <div className="empty-state-icon-badge">
+        <span>{icon}</span>
+      </div>
+      <h4 className="empty-state-title">{title}</h4>
+      <p className="empty-state-subtitle">{subtitle}</p>
+      {actionButton && (
+        <div className="empty-state-actions">
+          {actionButton}
+        </div>
+      )}
+    </div>
+  )
+}

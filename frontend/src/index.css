@@ -179,24 +179,38 @@ body {
   padding: 10px 14px;
   border-radius: var(--radius-md);
   font-weight: 500;
-  font-size: 14.5px;
+  font-size: 14px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: all var(--transition-fast);
   border: 1px solid transparent;
+  position: relative;
 }
 
 .nav-item:hover {
   background-color: var(--bg-card);
   color: var(--text-primary);
-  padding-left: 16px;
+  padding-left: 17px;
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-item.active {
-  background-color: rgba(244, 63, 94, 0.07);
-  border-color: rgba(244, 63, 94, 0.2);
-  color: var(--text-primary);
-  font-weight: 600;
+  background: linear-gradient(90deg, rgba(220, 38, 38, 0.09) 0%, rgba(220, 38, 38, 0.03) 100%);
+  border-color: rgba(220, 38, 38, 0.18);
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 0 8px rgba(220, 38, 38, 0.4);
 }
 
 .nav-icon {
@@ -204,6 +218,12 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-item:hover .nav-icon {
+  transform: scale(1.1);
+  color: var(--text-primary);
 }
 
 .nav-item.active .nav-icon {
@@ -422,33 +442,89 @@ body {
   box-shadow: var(--shadow-lg);
 }
 
-/* Card Color Variants */
+/* Card Color Variants with Accent Top Bar & Ambient Glow */
 .card-tint-red {
-  background: linear-gradient(145deg, #ffffff, #fff5f5);
-  border-color: #fecaca;
+  background: linear-gradient(160deg, #ffffff 65%, #fff1f2 100%);
+  border-color: #fecdd3;
+  position: relative;
 }
-.card-tint-red:hover { border-color: #f87171; }
+.card-tint-red::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, #f43f5e, #dc2626);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.card-tint-red:hover { 
+  border-color: #fb7185; 
+  box-shadow: 0 14px 28px -4px rgba(225, 29, 72, 0.12), 0 4px 10px rgba(15, 23, 42, 0.04);
+}
 
 .card-tint-green {
-  background: linear-gradient(145deg, #ffffff, #f0fdf4);
+  background: linear-gradient(160deg, #ffffff 65%, #f0fdf4 100%);
   border-color: #bbf7d0;
+  position: relative;
 }
-.card-tint-green:hover { border-color: #4ade80; }
+.card-tint-green::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, #34d399, #059669);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.card-tint-green:hover { 
+  border-color: #4ade80; 
+  box-shadow: 0 14px 28px -4px rgba(16, 185, 129, 0.12), 0 4px 10px rgba(15, 23, 42, 0.04);
+}
 
 .card-tint-blue {
-  background: linear-gradient(145deg, #ffffff, #eff6ff);
+  background: linear-gradient(160deg, #ffffff 65%, #eff6ff 100%);
   border-color: #bfdbfe;
+  position: relative;
 }
-.card-tint-blue:hover { border-color: #60a5fa; }
+.card-tint-blue::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, #60a5fa, #2563eb);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.card-tint-blue:hover { 
+  border-color: #60a5fa; 
+  box-shadow: 0 14px 28px -4px rgba(37, 99, 235, 0.12), 0 4px 10px rgba(15, 23, 42, 0.04);
+}
 
 .card-tint-gold {
-  background: linear-gradient(145deg, #ffffff, #fffbeb);
+  background: linear-gradient(160deg, #ffffff 65%, #fffbeb 100%);
   border-color: #fef08a;
+  position: relative;
 }
-.card-tint-gold:hover { border-color: #facc15; }
+.card-tint-gold::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.card-tint-gold:hover { 
+  border-color: #facc15; 
+  box-shadow: 0 14px 28px -4px rgba(245, 158, 11, 0.12), 0 4px 10px rgba(15, 23, 42, 0.04);
+}
 
 .card-title {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 800;
   color: var(--text-muted);
   margin: 0 0 16px;
@@ -471,7 +547,7 @@ body {
 }
 
 .metric-value {
-  font-size: 38px;
+  font-size: 36px;
   font-weight: 900;
   letter-spacing: -1px;
   margin: 6px 0 10px;
@@ -479,7 +555,7 @@ body {
 }
 
 .metric-footer {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
@@ -602,47 +678,128 @@ body {
   background-color: #f8fafc;
 }
 
-/* Status Badges */
+/* Status Badges with Vibrant Semantic Tints */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 4px 11px;
   border-radius: 9999px;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.2px;
   transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .badge-pending {
-  background-color: #fef3c7;
-  color: #b45309;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #92400e;
   border: 1px solid #fde68a;
 }
 
 .badge-success {
-  background-color: #ecfdf5;
-  color: #047857;
-  border: 1px solid #a7f3d0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  color: #166534;
+  border: 1px solid #bbf7d0;
 }
 
 .badge-danger {
-  background-color: #fff1f2;
-  color: #be123c;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  color: #9f1239;
   border: 1px solid #fecdd3;
 }
 
 .badge-primary {
-  background-color: #eff6ff;
-  color: #1d4ed8;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1e40af;
   border: 1px solid #bfdbfe;
 }
 
 .badge-gold {
-  background-color: #fffbeb;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   color: #b45309;
-  border: 1px solid #fef08a;
+  border: 1px solid #fde68a;
+}
+
+/* Branded Empty States with Watermark and Soft Glow */
+.app-empty-state {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px dashed #cbd5e1;
+  border-radius: var(--radius-xl, 20px);
+  padding: 38px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-smooth);
+}
+
+.app-empty-state.compact {
+  padding: 22px 16px;
+}
+
+.app-empty-state:hover {
+  border-color: #94a3b8;
+  border-style: solid;
+  box-shadow: var(--shadow-md);
+}
+
+.empty-state-icon-badge {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+  border: 1px solid #fecaca;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.12);
+  position: relative;
+  z-index: 1;
+}
+
+.app-empty-state.compact .empty-state-icon-badge {
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.empty-state-title {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.empty-state-subtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  max-width: 400px;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+  position: relative;
+  z-index: 1;
+}
+
+.app-empty-state.compact .empty-state-subtitle {
+  margin-bottom: 0;
+}
+
+.empty-state-actions {
+  display: flex;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 /* Buttons Redesigned - Premium SaaS Style */

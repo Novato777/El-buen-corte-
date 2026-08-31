@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { v2 as cloudinary } from 'cloudinary';
 import pool from './db.js';
 import { normalizeUnit, calculateStockDeduction, calculateUnitPriceForSoldUnit, formatStockDisplay, convertQuantity } from './units.js';
+import idempotencyMiddleware from './idempotency.js';
 
 dotenv.config();
 
@@ -20,9 +21,59 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+app.disable('x-powered-by');
+
+// Cabeceras de seguridad HTTP
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
+
+// Rate limiter en memoria para prevenir ataques de fuerza bruta en login
+const loginAttempts = new Map(); // IP -> { count, firstAttempt }
+const LOGIN_MAX_ATTEMPTS = 12;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutos
+
+const loginRateLimiter = (req, res, next) => {
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const record = loginAttempts.get(clientIp);
+
+  if (record) {
+    if (now - record.firstAttempt > LOGIN_WINDOW_MS) {
+      loginAttempts.delete(clientIp);
+    } else if (record.count >= LOGIN_MAX_ATTEMPTS) {
+      const remainingMinutes = Math.ceil((LOGIN_WINDOW_MS - (now - record.firstAttempt)) / 60000);
+      return res.status(429).json({ 
+        error: `Demasiados intentos fallidos de inicio de sesión. Acceso pausado por seguridad durante ${remainingMinutes} minutos.` 
+      });
+    }
+  }
+  next();
+};
+
+const recordFailedLogin = (req) => {
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const record = loginAttempts.get(clientIp);
+  if (!record || now - record.firstAttempt > LOGIN_WINDOW_MS) {
+    loginAttempts.set(clientIp, { count: 1, firstAttempt: now });
+  } else {
+    record.count += 1;
+  }
+};
+
+const resetLoginAttempts = (req) => {
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  loginAttempts.delete(clientIp);
+};
 
 // Middleware para verificar JWT Token
 const authenticateToken = (req, res, next) => {
@@ -366,12 +417,12 @@ app.post('/api/upload', authenticateToken, async (req, res) => {
   }
 });
 
-// Login de Usuario
-app.post('/api/auth/login', async (req, res) => {
+// Login de Usuario con Protección de Fuerza Bruta
+app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
-      return res.status(400).json({ error: 'Debes proporcionar correo electrónico y contraseña.' });
+      return res.status(400).json({ error: 'Debes proporcionar correo electrónico o usuario y contraseña.' });
     }
 
     const { rows } = await pool.query(
@@ -379,7 +430,8 @@ app.post('/api/auth/login', async (req, res) => {
       [username.trim()]
     );
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciales incorrectas. El usuario no está registrado.' });
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'Credenciales incorrectas. Verifica tu usuario/correo y contraseña.' });
     }
 
     const user = rows[0];
@@ -391,8 +443,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      recordFailedLogin(req);
       return res.status(401).json({ error: 'Credenciales incorrectas. Contraseña inválida.' });
     }
+
+    // Login exitoso: reiniciar contador de intentos
+    resetLoginAttempts(req);
 
     const token = jwt.sign(
       { id: user.id, nombre: user.nombre, email: user.email, username: user.username, rol: user.rol, activo: user.activo },
@@ -851,7 +907,7 @@ app.get('/api/public/perfil', async (req, res) => {
 });
 
 // Crear pedido público desde la tienda virtual
-app.post('/api/public/pedidos', async (req, res) => {
+app.post('/api/public/pedidos', idempotencyMiddleware, async (req, res) => {
   try {
     const { cliente, telefono, direccion, metodoPago, notas, items, tenantId } = req.body;
     
@@ -1055,12 +1111,27 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
 });
 
 // Crear producto en el inventario
-app.post('/api/inventario', authenticateToken, async (req, res) => {
+app.post('/api/inventario', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { nombre, stock, precioVenta, limiteMin, categoria, descripcion, foto, descuento, unidadMedida, unidad_medida } = req.body;
     
     if (!nombre || !precioVenta || !categoria) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precioVenta, categoria)' });
+    }
+
+    const numPrecio = Number(precioVenta);
+    if (isNaN(numPrecio) || numPrecio <= 0) {
+      return res.status(400).json({ error: 'El precio de venta debe ser un número positivo mayor a 0.' });
+    }
+
+    const numStock = Number(stock || 0);
+    if (isNaN(numStock) || numStock < 0) {
+      return res.status(400).json({ error: 'El stock inicial no puede ser un número negativo.' });
+    }
+
+    const numLimite = Number(limiteMin || 0);
+    if (isNaN(numLimite) || numLimite < 0) {
+      return res.status(400).json({ error: 'El límite mínimo de stock no puede ser un número negativo.' });
     }
 
     const finalUnit = normalizeUnit(unidadMedida || unidad_medida, categoria, nombre);
@@ -1161,9 +1232,15 @@ app.delete('/api/inventario/:id', authenticateToken, async (req, res) => {
 });
 
 // Abastecer stock de un producto
-app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
+app.post('/api/inventario/abastecer', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { productoId, cantidad, unidad } = req.body;
+    const rawQty = Number(cantidad);
+
+    if (isNaN(rawQty) || rawQty <= 0) {
+      return res.status(400).json({ error: 'La cantidad a abastecer debe ser un número positivo mayor a 0.' });
+    }
+
     const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [productoId]);
     
     if (findResult.rows.length === 0) {
@@ -1171,7 +1248,6 @@ app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
     }
 
     const prod = findResult.rows[0];
-    const rawQty = Number(cantidad);
     const baseUnit = normalizeUnit(prod.unidad_medida || 'kg');
     const inputUnit = normalizeUnit(unidad || baseUnit);
 
@@ -1223,9 +1299,15 @@ app.post('/api/inventario/abastecer', authenticateToken, async (req, res) => {
 });
 
 // Registrar merma de un producto
-app.post('/api/inventario/mermas', authenticateToken, async (req, res) => {
+app.post('/api/inventario/mermas', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { productoId, peso, motivo } = req.body;
+    const pesoMerma = Number(peso);
+
+    if (isNaN(pesoMerma) || pesoMerma <= 0) {
+      return res.status(400).json({ error: 'La cantidad o peso de merma debe ser un número positivo mayor a 0.' });
+    }
+
     const findResult = await pool.query('SELECT * FROM inventario WHERE id = $1', [productoId]);
 
     if (findResult.rows.length === 0) {
@@ -1233,7 +1315,6 @@ app.post('/api/inventario/mermas', authenticateToken, async (req, res) => {
     }
 
     const prod = findResult.rows[0];
-    const pesoMerma = Number(peso);
     const nuevoStock = Math.max(0, Number(prod.stock) - pesoMerma);
     
     await pool.query('UPDATE inventario SET stock = $1 WHERE id = $2', [nuevoStock, productoId]);
@@ -1327,7 +1408,7 @@ app.get('/api/pedidos', authenticateToken, async (req, res) => {
 });
 
 // Crear pedido desde el panel de administración
-app.post('/api/pedidos', authenticateToken, async (req, res) => {
+app.post('/api/pedidos', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { cliente, items, metodoPago } = req.body;
     
@@ -1416,7 +1497,7 @@ app.post('/api/pedidos', authenticateToken, async (req, res) => {
 });
 
 // Cambiar estado de pedido (Entregado / Cancelado)
-app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
+app.patch('/api/pedidos/:id/status', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const { estado, metodoPago } = req.body; // 'Entregado' o 'Cancelado'
@@ -1427,13 +1508,6 @@ app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
     }
     const p = findResult.rows[0];
 
-    if (p.estado !== 'Pendiente') {
-      return res.status(400).json({ error: 'El pedido ya no está pendiente' });
-    }
-
-    const finalPaymentMethod = metodoPago || p.metodo_pago || 'Efectivo';
-    await pool.query('UPDATE pedidos SET estado = $1, metodo_pago = $2 WHERE id = $3', [estado, finalPaymentMethod, id]);
-
     const itemsResult = await pool.query('SELECT * FROM pedido_items WHERE pedido_id = $1', [id]);
     const orderItems = itemsResult.rows.map(item => ({
       productoId: item.producto_id,
@@ -1442,6 +1516,29 @@ app.patch('/api/pedidos/:id/status', authenticateToken, async (req, res) => {
       precio: Number(item.precio),
       unidad: normalizeUnit(item.unidad || 'kg')
     }));
+
+    const finalPaymentMethod = metodoPago || p.metodo_pago || 'Efectivo';
+
+    // Protección contra doble cambio de estado idempotente
+    if (p.estado !== 'Pendiente') {
+      if (p.estado === estado) {
+        return res.json({
+          pedido: {
+            id: p.id,
+            cliente: p.cliente,
+            total: Number(p.total),
+            estado: p.estado,
+            metodoPago: p.metodo_pago,
+            fecha: p.fecha,
+            items: orderItems
+          },
+          message: 'El pedido ya fue procesado previamente con este estado'
+        });
+      }
+      return res.status(400).json({ error: `El pedido ya no está pendiente (estado actual: ${p.estado})` });
+    }
+
+    await pool.query('UPDATE pedidos SET estado = $1, metodo_pago = $2 WHERE id = $3', [estado, finalPaymentMethod, id]);
 
     const fullPedido = {
       id: p.id,
@@ -1521,7 +1618,7 @@ app.get('/api/simulaciones', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/simulaciones', authenticateToken, async (req, res) => {
+app.post('/api/simulaciones', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { pesoPie, costoTotal, carneKg, realCostoKg } = req.body;
     const dateStr = new Date().toLocaleDateString('es-CO');
@@ -1580,12 +1677,13 @@ app.get('/api/transacciones', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
+app.post('/api/transacciones/ingreso', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { descripcion, monto, metodoPago, items, cliente } = req.body;
+    const numMonto = Number(monto);
     
-    if (!monto || !metodoPago) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios (monto, metodoPago)' });
+    if (!monto || !metodoPago || isNaN(numMonto) || numMonto <= 0) {
+      return res.status(400).json({ error: 'El monto del ingreso debe ser un número mayor a 0 y el método de pago es obligatorio.' });
     }
 
     // 1. Si vienen ítems de productos vendidos (Flujo POS), verificar y descontar stock
@@ -1679,12 +1777,13 @@ app.post('/api/transacciones/ingreso', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/transacciones/egreso', authenticateToken, async (req, res) => {
+app.post('/api/transacciones/egreso', authenticateToken, idempotencyMiddleware, async (req, res) => {
   try {
     const { descripcion, monto, metodoPago } = req.body;
+    const numMonto = Number(monto);
     
-    if (!descripcion || !monto) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    if (!descripcion || !monto || isNaN(numMonto) || numMonto <= 0) {
+      return res.status(400).json({ error: 'La descripción y un monto numérico positivo mayor a 0 son obligatorios.' });
     }
 
     const countTrx = await pool.query('SELECT count(*) FROM transacciones');
@@ -1711,6 +1810,12 @@ app.post('/api/transacciones/egreso', authenticateToken, async (req, res) => {
     console.error('Error al registrar egreso:', err);
     res.status(500).json({ error: 'Error al registrar egreso' });
   }
+});
+
+// Manejador global seguro de errores (No expone stack traces en producción)
+app.use((err, req, res, next) => {
+  console.error('❌ Error no capturado en servidor:', err.message);
+  res.status(500).json({ error: 'Ocurrió un error inesperado al procesar la solicitud en el servidor.' });
 });
 
 // --- Arranque del Servidor ---
