@@ -775,7 +775,7 @@ app.get('/api/public/productos', async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
-      unidadMedida: normalizeUnit(r.unidad_medida),
+      unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -1042,7 +1042,7 @@ app.get('/api/inventario', authenticateToken, async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
-      unidadMedida: normalizeUnit(r.unidad_medida),
+      unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min),
       tenantId: r.tenant_id
@@ -1063,7 +1063,7 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Faltan campos obligatorios (nombre, precioVenta, categoria)' });
     }
 
-    const finalUnit = normalizeUnit(unidadMedida || unidad_medida || 'kg');
+    const finalUnit = normalizeUnit(unidadMedida || unidad_medida, categoria, nombre);
 
     // Obtener ID numérico máximo
     const maxResult = await pool.query('SELECT id FROM inventario');
@@ -1098,7 +1098,7 @@ app.post('/api/inventario', authenticateToken, async (req, res) => {
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
-      unidadMedida: normalizeUnit(r.unidad_medida),
+      unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min)
     });
@@ -1134,7 +1134,7 @@ app.patch('/api/inventario/:id/descuento', authenticateToken, async (req, res) =
       foto: r.foto,
       precioVenta: Number(r.precio_venta),
       descuento: Number(r.descuento || 0),
-      unidadMedida: normalizeUnit(r.unidad_medida),
+      unidadMedida: normalizeUnit(r.unidad_medida, r.categoria, r.nombre),
       stock: Number(r.stock),
       limiteMin: Number(r.limite_min)
     });

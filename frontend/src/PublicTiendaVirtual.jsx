@@ -122,7 +122,12 @@ export default function PublicTiendaVirtual() {
 
       if (!prodRes.ok) throw new Error('No se pudo cargar el catálogo de productos.')
       const prodData = await prodRes.json()
-      setProductos(prodData)
+      const normalizedProds = (Array.isArray(prodData) ? prodData : []).map(p => ({
+        ...p,
+        unidadMedida: normalizeUnit(p.unidadMedida || p.unidad_medida, p.categoria, p.nombre),
+        descuento: Number(p.descuento || 0)
+      }))
+      setProductos(normalizedProds)
 
       if (profileRes.ok) {
         const profData = await profileRes.json()

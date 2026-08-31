@@ -1010,7 +1010,12 @@ function App() {
         safeFetch(`${API_BASE}/simulaciones`),
         safeFetch(`${API_BASE}/business-profile`)
       ])
-      setInventario(invData)
+      const normalizedInv = (Array.isArray(invData) ? invData : []).map(p => ({
+        ...p,
+        unidadMedida: normalizeUnit(p.unidadMedida || p.unidad_medida, p.categoria, p.nombre),
+        descuento: Number(p.descuento || 0)
+      }))
+      setInventario(normalizedInv)
       setPedidos(pedData)
       setTransacciones(trxData)
       setMermas(mermaData)
@@ -5540,31 +5545,39 @@ function App() {
                   style={{ fontSize: '13.5px', fontWeight: '600' }}
                 >
                   {inventario.map(i => (
-                    <option key={i.id} value={i.id}>{i.nombre} — (Stock: {i.stock} kg)</option>
+                    <option key={i.id} value={i.id}>{i.nombre} — (Stock: {formatStockDisplay(i.stock, i.unidadMedida)})</option>
                   ))}
                 </select>
               </div>
 
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                  Peso de Merma a Descontar (kg) *
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type="number" 
-                    step="any"
-                    min="0.05"
-                    className="input-control" 
-                    value={newMermaWeight}
-                    onChange={(e) => setNewMermaWeight(e.target.value)}
-                    required
-                    style={{ fontSize: '15px', fontWeight: '700', padding: '0 32px 0 14px', height: '44px' }}
-                  />
-                  <span style={{ position: 'absolute', right: '12px', fontSize: '12px', color: '#64748b', fontWeight: '700', pointerEvents: 'none' }}>
-                    kg
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const curProd = inventario.find(i => String(i.id) === String(newMermaProduct)) || inventario[0]
+                const u = normalizeUnit(curProd?.unidadMedida)
+                const isUnd = u === 'und'
+
+                return (
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
+                      Cantidad de Merma a Descontar ({isUnd ? 'unidades' : u}) *
+                    </label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input 
+                        type="number" 
+                        step={isUnd ? '1' : 'any'}
+                        min={isUnd ? '1' : '0.05'}
+                        className="input-control" 
+                        value={newMermaWeight}
+                        onChange={(e) => setNewMermaWeight(isUnd ? Math.round(Number(e.target.value)) : e.target.value)}
+                        required
+                        style={{ fontSize: '15px', fontWeight: '700', padding: '0 45px 0 14px', height: '44px' }}
+                      />
+                      <span style={{ position: 'absolute', right: '12px', fontSize: '12px', color: '#64748b', fontWeight: '700', pointerEvents: 'none' }}>
+                        {getUnitLabel(u)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>

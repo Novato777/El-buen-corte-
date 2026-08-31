@@ -19,13 +19,25 @@ export const UNIT_TYPES = {
 /**
  * Normaliza la unidad de medida a 'und', 'kg' o 'lb'
  * @param {string} unit 
+ * @param {string} category Opcional para inferencia automática
+ * @param {string} name Opcional para inferencia automática
  * @returns {'und' | 'kg' | 'lb'}
  */
-export function normalizeUnit(unit) {
-  if (!unit) return 'kg'
+export function normalizeUnit(unit, category = '', name = '') {
+  if (!unit) {
+    if (category === 'Embutidos' || /chorizo|salchicha|hamburguesa|arepa|paquete|unidad/i.test(name)) {
+      return 'und'
+    }
+    return 'kg'
+  }
   const u = String(unit).toLowerCase().trim()
-  if (u === 'und' || u === 'unidad' || u === 'unidades' || u === 'u') return 'und'
+  if (u === 'und' || u === 'unidad' || u === 'unidades' || u === 'u' || u === 'unds' || u === 'pza' || u === 'pieza') return 'und'
   if (u === 'lb' || u === 'libra' || u === 'libras' || u === 'lbs') return 'lb'
+  if (u === 'kg' || u === 'kilo' || u === 'kilos' || u === 'kgs') return 'kg'
+  
+  if (category === 'Embutidos' || /chorizo|salchicha|hamburguesa|arepa|paquete|unidad/i.test(name)) {
+    return 'und'
+  }
   return 'kg'
 }
 
