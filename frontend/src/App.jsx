@@ -2773,7 +2773,18 @@ function App() {
                       >
                         <PlusIcon /> Nuevo Pedido
                       </button>
-                      <button className="btn btn-secondary" onClick={() => setShowAddStockModal(true)}>
+                      <button 
+                        className="btn btn-secondary" 
+                        onClick={() => {
+                          if (inventario.length > 0) {
+                            setNewStockProduct(inventario[0].id);
+                            setNewStockWeight(inventario[0].unidadMedida === 'und' ? 10 : 5);
+                          }
+                          setNewStockCost('');
+                          setNewStockPaymentMethod('Efectivo');
+                          setShowAddStockModal(true);
+                        }}
+                      >
                         <BoxIcon /> Abastecer Inventario
                       </button>
                       <button className="btn btn-danger" onClick={() => setShowAddMermaModal(true)}>
