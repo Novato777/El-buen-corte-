@@ -697,6 +697,16 @@ function App() {
         throw new Error('Credenciales inválidas para el Portal Maestro.')
       }
 
+      // Limpiar estados de sesión anterior para evitar retención en memoria
+      setInventario([])
+      setPedidos([])
+      setTransacciones([])
+      setMermas([])
+      setSavedSimulations([])
+      setNotificaciones([])
+      setProfileData(DEFAULT_PROFILE)
+      setProfileForm(DEFAULT_PROFILE)
+
       localStorage.setItem('el_buen_corte_token', data.token)
       localStorage.setItem('el_buen_corte_user', JSON.stringify(data.user))
       setAuthToken(data.token)
@@ -705,6 +715,7 @@ function App() {
         setActiveTab('superadmin')
       } else {
         setActiveTab('resumen')
+        loadData(data.token)
       }
     } catch (err) {
       console.error("Login error:", err)
@@ -822,6 +833,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('el_buen_corte_token')
     localStorage.removeItem('el_buen_corte_user')
+    localStorage.removeItem('el_buen_corte_profile')
     setAuthToken('')
     setCurrentUser(null)
     setInventario([])
@@ -833,6 +845,7 @@ function App() {
     setUnreadNotifsCount(0)
     setShowNotifDropdown(false)
     setProfileData(DEFAULT_PROFILE)
+    setProfileForm(DEFAULT_PROFILE)
     setActiveTab('resumen')
   }
 
@@ -1023,12 +1036,15 @@ function App() {
   }, [currentUser, activeTab])
 
   // Load data function
-  const loadData = async () => {
+  const loadData = async (tokenOverride) => {
+    const activeToken = tokenOverride || localStorage.getItem('el_buen_corte_token') || authToken;
+    if (!activeToken) return;
+
     try {
       const safeFetch = async (url) => {
         const res = await fetch(url, {
           headers: {
-            ...getAuthHeaders()
+            'Authorization': `Bearer ${activeToken}`
           }
         })
         if (res.status === 401 || res.status === 403) {
@@ -1048,19 +1064,21 @@ function App() {
         safeFetch(`${API_BASE}/simulaciones`),
         safeFetch(`${API_BASE}/business-profile`)
       ])
+
       const normalizedInv = (Array.isArray(invData) ? invData : []).map(p => ({
         ...p,
         unidadMedida: normalizeUnit(p.unidadMedida || p.unidad_medida, p.categoria, p.nombre),
         descuento: Number(p.descuento || 0)
       }))
+
       setInventario(normalizedInv)
-      setPedidos(pedData)
-      setTransacciones(trxData)
-      setMermas(mermaData)
-      setSavedSimulations(simData)
-      let mergedProfile = DEFAULT_PROFILE
-      if (profileRes && Object.keys(profileRes).length > 0) {
-        mergedProfile = {
+      setPedidos(Array.isArray(pedData) ? pedData : [])
+      setTransacciones(Array.isArray(trxData) ? trxData : [])
+      setMermas(Array.isArray(mermaData) ? mermaData : [])
+      setSavedSimulations(Array.isArray(simData) ? simData : [])
+
+      if (profileRes && profileRes.general && Object.keys(profileRes.general).length > 0) {
+        const mergedProfile = {
           ...DEFAULT_PROFILE,
           ...profileRes,
           general: { ...DEFAULT_PROFILE.general, ...(profileRes.general || {}) },
@@ -1072,41 +1090,21 @@ function App() {
           financiero: { ...DEFAULT_PROFILE.financiero, ...(profileRes.financiero || {}) },
           adicional: { ...DEFAULT_PROFILE.adicional, ...(profileRes.adicional || {}) }
         }
-      }
-      setProfileData(mergedProfile)
-      setProfileForm(mergedProfile)
-    } catch (err) {
-      console.warn("No se pudo conectar al backend o la sesión requiere autenticación:", err)
-      setInventario(prev => prev.length > 0 ? prev : INITIAL_INVENTARIO)
-      setPedidos(prev => prev.length > 0 ? prev : INITIAL_PEDIDOS)
-      setTransacciones(prev => prev.length > 0 ? prev : INITIAL_TRANSACCIONES)
-      setMermas(prev => prev.length > 0 ? prev : INITIAL_MERMAS)
-      setSavedSimulations(prev => prev.length > 0 ? prev : [
-        { id: 1, fecha: 'Hoy', pesoPie: 460, costoTotal: 4416000, carneKg: 177.1, realCostoKg: 24935 },
-        { id: 2, fecha: 'Ayer', pesoPie: 430, costoTotal: 4128000, carneKg: 165.5, realCostoKg: 24942 }
-      ])
-      
-      const localProfile = localStorage.getItem('el_buen_corte_profile')
-      let profile = DEFAULT_PROFILE
-      if (localProfile) {
-        try {
-          const parsed = JSON.parse(localProfile)
-          profile = {
-            ...DEFAULT_PROFILE,
-            ...parsed,
-            general: { ...DEFAULT_PROFILE.general, ...(parsed.general || {}) },
-            identidad: { ...DEFAULT_PROFILE.identidad, ...(parsed.identidad || {}) },
-            contacto: { ...DEFAULT_PROFILE.contacto, ...(parsed.contacto || {}) },
-            ubicacion: { ...DEFAULT_PROFILE.ubicacion, ...(parsed.ubicacion || {}) },
-            redes: parsed.redes || DEFAULT_PROFILE.redes,
-            horarios: parsed.horarios || DEFAULT_PROFILE.horarios,
-            financiero: { ...DEFAULT_PROFILE.financiero, ...(parsed.financiero || {}) },
-            adicional: { ...DEFAULT_PROFILE.adicional, ...(parsed.adicional || {}) }
+        setProfileData(mergedProfile)
+        setProfileForm(mergedProfile)
+      } else {
+        const defaultTenantProfile = {
+          ...DEFAULT_PROFILE,
+          general: {
+            ...DEFAULT_PROFILE.general,
+            nombre: currentUser?.nombre ? `Carnicería ${currentUser.nombre}` : 'El Buen Corte'
           }
-        } catch(e) {}
+        }
+        setProfileData(defaultTenantProfile)
+        setProfileForm(defaultTenantProfile)
       }
-      setProfileData(prev => prev && prev.general && prev.general.nombre !== 'El Buen Corte' ? prev : profile)
-      setProfileForm(prev => prev && prev.general && prev.general.nombre !== 'El Buen Corte' ? prev : profile)
+    } catch (err) {
+      console.warn("Error al cargar datos de la sede:", err)
     }
   }
 
@@ -2084,16 +2082,13 @@ function App() {
         }
         setProfileData(merged)
         setProfileForm(merged)
-        localStorage.setItem('el_buen_corte_profile', JSON.stringify(merged))
-        alert("✅ Los cambios se guardaron correctamente.")
+        alert("✅ Los cambios se guardaron correctamente en la base de datos.")
       } else {
         throw new Error('Respuesta inválida del servidor')
       }
     } catch (err) {
-      console.warn("Error al guardar en backend, guardando localmente:", err)
-      setProfileData(profileForm)
-      localStorage.setItem('el_buen_corte_profile', JSON.stringify(profileForm))
-      alert("✅ Los cambios se guardaron localmente.")
+      console.warn("Error al guardar perfil en backend:", err)
+      alert("❌ No se pudo guardar el perfil en el servidor: " + (err.message || 'Error desconocido'))
     } finally {
       saveProfileSubmittingRef.current = false
       setSaveProfileSubmitting(false)
@@ -5453,9 +5448,9 @@ function App() {
               className="modal-card animate-fade-in" 
               onSubmit={handleAddStock}
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '540px', width: '92%', borderRadius: '22px', overflow: 'hidden' }}
+              style={{ maxWidth: '540px', width: '92%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '22px', overflow: 'hidden' }}
             >
-              <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
                     width: '42px',
@@ -5502,7 +5497,7 @@ function App() {
                 </button>
               </div>
 
-              <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
                 {/* Producto Selector */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
@@ -5694,9 +5689,9 @@ function App() {
             className="modal-card animate-fade-in" 
             onSubmit={handleSaveDiscount}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '480px', width: '92%', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+            style={{ maxWidth: '480px', width: '92%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '40px',
@@ -5743,7 +5738,7 @@ function App() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               
               {/* Resumen de Precios */}
               <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 16px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -5826,7 +5821,7 @@ function App() {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
               <button 
                 type="button" 
                 className="btn btn-secondary" 
@@ -5866,9 +5861,9 @@ function App() {
             className="modal-card animate-fade-in" 
             onSubmit={handleAddMerma}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '520px', width: '92%', borderRadius: '20px', overflow: 'hidden' }}
+            style={{ maxWidth: '520px', width: '92%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden' }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '40px',
@@ -5915,7 +5910,7 @@ function App() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
                   Corte con Merma *
@@ -5977,7 +5972,7 @@ function App() {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
               <button 
                 type="button" 
                 className="btn btn-secondary" 
@@ -6011,9 +6006,9 @@ function App() {
             className="modal-card animate-fade-in" 
             onSubmit={handleAddExpense}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '520px', width: '92%', borderRadius: '20px', overflow: 'hidden' }}
+            style={{ maxWidth: '520px', width: '92%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden' }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '40px',
@@ -6060,7 +6055,7 @@ function App() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
                   Descripción del Gasto *
@@ -6146,7 +6141,7 @@ function App() {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', flexShrink: 0 }}>
               <button 
                 type="button" 
                 className="btn btn-secondary" 
@@ -6179,10 +6174,10 @@ function App() {
           <div 
             className="modal-card animate-fade-in" 
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: posSelectedOrder ? '560px' : '680px', width: '95%', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
+            style={{ maxWidth: posSelectedOrder ? '560px' : '680px', width: '95%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
           >
             {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '42px',
@@ -6236,8 +6231,8 @@ function App() {
 
             {/* CASO A: COBRO Y ENTREGA DE PEDIDO DESDE GESTIÓN DE PEDIDOS */}
             {posSelectedOrder ? (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="modal-body" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '76vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+                <div className="modal-body" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
                   
                   {/* SECCIÓN 1: RESUMEN DE CORTES (AZUL/SLATE) */}
                   <div style={{ background: '#f0f7ff', borderRadius: '14px', padding: '14px 16px', border: '1.5px solid #bfdbfe' }}>
@@ -6253,25 +6248,27 @@ function App() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
                       {posSelectedOrder.items?.map((item, idx) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #dbeafe', fontSize: '13px' }}>
-                          <span><strong>{item.cantidad} {item.unidad || 'kg'}</strong> de {item.nombre}</span>
+                          <span style={{ fontWeight: '600' }}>{item.cantidad} {item.unidad || 'kg'} × {item.nombre}</span>
                           <strong style={{ color: '#0f172a' }}>{formatCOP((item.precio || item.precioVenta || 0) * item.cantidad)}</strong>
                         </div>
                       ))}
                     </div>
-                    {posSelectedOrder.notas && (
-                      <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#b45309', background: '#fffbeb', padding: '6px 10px', borderRadius: '6px', border: '1px solid #fef3c7' }}>
-                        📝 <strong>Notas:</strong> {posSelectedOrder.notas}
-                      </div>
-                    )}
                   </div>
 
-                  {/* SECCIÓN 2: MÉTODO DE PAGO Y VUELTAS (VERDE/ESMERALDA) */}
-                  <div style={{ background: '#f0fdf4', borderRadius: '14px', padding: '14px 16px', border: '1.5px solid #86efac' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                      <span style={{ background: '#16a34a', color: '#ffffff', fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
-                        2. Forma de Cobro
+                  {/* SECCIÓN 2: DATOS DEL CLIENTE */}
+                  <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '10px 14px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                    <div>👤 <strong>Cliente:</strong> {posSelectedOrder.cliente}</div>
+                    {posSelectedOrder.direccion && <div>📍 <strong>Dirección:</strong> {posSelectedOrder.direccion}</div>}
+                    {posSelectedOrder.notas && <div style={{ color: '#b45309' }}>📝 <strong>Notas:</strong> {posSelectedOrder.notas}</div>}
+                  </div>
+
+                  {/* SECCIÓN 3: PAGO Y CAMBIO */}
+                  <div style={{ background: '#ecfdf5', borderRadius: '14px', padding: '14px 16px', border: '1.5px solid #a7f3d0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ background: '#059669', color: '#ffffff', fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
+                        2. Liquidación y Cobro
                       </span>
-                      <span style={{ fontSize: '12px', color: '#15803d', fontWeight: '700' }}>
+                      <span style={{ fontSize: '11.5px', color: '#065f46', fontWeight: '700' }}>
                         Selecciona el método recibido
                       </span>
                     </div>
@@ -6334,16 +6331,16 @@ function App() {
                           <input
                             type="text"
                             className="input-control"
-                            placeholder="Ej. 50.000"
+                            placeholder="Ej. 100.000"
                             value={formatNumberWithDots(posCashReceived)}
                             onChange={(e) => setPosCashReceived(parseFormattedNumber(e.target.value))}
-                            style={{ height: '36px', fontSize: '13px', fontWeight: '800', padding: '0 10px', borderColor: '#86efac' }}
+                            style={{ height: '36px', fontSize: '13px', fontWeight: '800', padding: '0 8px', borderColor: '#86efac' }}
                           />
                           {(() => {
                             const cashNum = parseFormattedNumber(posCashReceived) || 0
                             if (cashNum > posSelectedOrder.total) {
                               return (
-                                <div style={{ fontSize: '12px', color: '#15803d', fontWeight: '900', marginTop: '4px', background: '#dcfce7', padding: '4px 8px', borderRadius: '6px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '11.5px', color: '#15803d', fontWeight: '900', marginTop: '3px', background: '#dcfce7', padding: '3px 6px', borderRadius: '5px', textAlign: 'center' }}>
                                   🔄 Vueltas: {formatCOP(cashNum - posSelectedOrder.total)}
                                 </div>
                               )
@@ -6352,42 +6349,23 @@ function App() {
                           })()}
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', fontSize: '11.5px', color: '#1e40af', background: '#eff6ff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                          <span>✓ Pago electrónico directo</span>
-                          <span style={{ fontSize: '10.5px', color: '#64748b' }}>Transferencia Nequi / Daviplata</span>
+                        <div>
+                          <label style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: '#15803d', display: 'block', marginBottom: '4px' }}>
+                            Referencia / Comprobante:
+                          </label>
+                          <input
+                            type="text"
+                            className="input-control"
+                            placeholder="Ej. Nequi # 849302"
+                            style={{ height: '36px', fontSize: '12px', padding: '0 8px' }}
+                          />
                         </div>
                       )}
                     </div>
                   </div>
-
-                  {/* SECCIÓN 3: TOTAL DEL PEDIDO (DARK PREMIUM) */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                    padding: '14px 18px',
-                    borderRadius: '14px',
-                    border: '1.5px solid #334155',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.5px' }}>
-                        Total a Cobrar:
-                      </span>
-                      <div style={{ fontSize: '11.5px', color: '#10b981', fontWeight: '700' }}>
-                        ✓ Listo para asentar en caja
-                      </div>
-                    </div>
-
-                    <strong style={{ fontSize: '24px', fontWeight: '900', color: '#ffffff' }}>
-                      {formatCOP(posSelectedOrder.total)}
-                    </strong>
-                  </div>
                 </div>
 
-                {/* Footer de Cobro */}
-                <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                   <button 
                     type="button" 
                     className="btn btn-secondary" 
@@ -6401,7 +6379,7 @@ function App() {
                   <button 
                     type="button" 
                     className="btn btn-primary"
-                    onClick={() => handleDeliverOrder(posSelectedOrder.id, newIncomePaymentMethod)}
+                    onClick={handleConfirmChargeOrder}
                     disabled={chargeLoading}
                     style={{ 
                       padding: '9px 20px', 
@@ -6423,9 +6401,9 @@ function App() {
               </div>
             ) : (
               /* CASO B: REGISTRO NORMAL DESDE CONTABILIDAD / CAJA */
-              <>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
                 {/* Mode Switcher Tabs */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '6px 16px', gap: '8px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '6px 16px', gap: '8px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
                   <button
                     type="button"
                     onClick={() => setIncomeMode('pos')}
@@ -6474,7 +6452,8 @@ function App() {
 
                 {/* Modal Body */}
                 {incomeMode === 'pos' ? (
-                  <div className="modal-body" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '76vh', overflowY: 'auto' }}>
+                  <>
+                  <div className="modal-body" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
                     
                     {/* 🟦 SECCIÓN 1: SELECCIÓN Y CONFIGURACIÓN DEL CORTE */}
                     <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px 14px', border: '1.5px solid #cbd5e1', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -6919,124 +6898,9 @@ function App() {
                       </strong>
                     </div>
                   </div>
-                ) : (
-                  /* TAB 2: INGRESO MANUAL EXTRAORDINARIO */
-                  <form onSubmit={handleAddIncome} style={{ display: 'flex', flexDirection: 'column' }}>
-                    <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
-                          Concepto / Descripción del Ingreso *
-                        </label>
-                        <input 
-                          type="text" 
-                          className="input-control" 
-                          placeholder="Ej. Abono cliente Don Carlos, Ajuste de caja, Propinas"
-                          value={newIncomeDesc}
-                          onChange={(e) => setNewIncomeDesc(e.target.value)}
-                          required
-                          style={{ fontSize: '13.5px', padding: '0 12px', height: '40px' }}
-                        />
-                      </div>
 
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
-                          Monto del Ingreso (COP) *
-                        </label>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                          <span style={{ position: 'absolute', left: '12px', fontSize: '14px', color: '#64748b', fontWeight: '800', pointerEvents: 'none' }}>$</span>
-                          <input 
-                            type="text" 
-                            className="input-control" 
-                            value={formatNumberWithDots(newIncomeAmount)}
-                            onChange={(e) => setNewIncomeAmount(parseFormattedNumber(e.target.value))}
-                            required
-                            style={{ fontSize: '16px', fontWeight: '800', padding: '0 12px 0 28px', height: '40px', color: '#059669' }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
-                          Método de Pago Recibido *
-                        </label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setNewIncomePaymentMethod('Efectivo')}
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: '10px',
-                              border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
-                              background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#f8fafc',
-                              color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#334155',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
-                              fontWeight: '800',
-                              fontSize: '13px',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            <span>💵</span> Efectivo
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setNewIncomePaymentMethod('Transferencia')}
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: '10px',
-                              border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                              background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#f8fafc',
-                              color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#334155',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
-                              fontWeight: '800',
-                              fontSize: '13px',
-                              transition: 'all 0.2s ease'
-                            }}
-                          >
-                            <span>📲</span> Transferencia
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary" 
-                        onClick={() => setShowAddIncomeModal(false)} 
-                        disabled={addIncomeSubmitting}
-                        style={{ padding: '8px 16px', fontSize: '12.5px' }}
-                      >
-                        Cancelar
-                      </button>
-                      <button 
-                        type="submit" 
-                        className="btn btn-success" 
-                        disabled={addIncomeSubmitting}
-                        style={{ 
-                          padding: '8px 18px', 
-                          fontSize: '12.5px', 
-                          fontWeight: '800',
-                          opacity: addIncomeSubmitting ? 0.65 : 1,
-                          cursor: addIncomeSubmitting ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {addIncomeSubmitting ? '⏳ Asentando Ingreso...' : '✓ Asentar Ingreso'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {/* Footer for POS mode */}
-                {incomeMode === 'pos' && (
-                  <div className="modal-footer" style={{ padding: '12px 18px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* Footer for POS mode */}
+                  <div className="modal-footer" style={{ padding: '12px 18px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                     <button 
                       type="button" 
                       className="btn btn-secondary" 
@@ -7069,191 +6933,124 @@ function App() {
                       {posSubmitting ? '⏳ Registrando...' : `✓ Confirmar Venta (${formatCOP(posCart.reduce((sum, item) => sum + item.subtotal, 0))}) & Descontar Stock`}
                     </button>
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+                </>
+              ) : (
+                /* TAB 2: INGRESO MANUAL EXTRAORDINARIO */
+                <form onSubmit={handleAddIncome} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+                  <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
+                        Concepto / Descripción del Ingreso *
+                      </label>
+                      <input 
+                        type="text" 
+                        className="input-control" 
+                        placeholder="Ej. Abono cliente Don Carlos, Ajuste de caja, Propinas"
+                        value={newIncomeDesc}
+                        onChange={(e) => setNewIncomeDesc(e.target.value)}
+                        required
+                        style={{ fontSize: '13.5px', padding: '0 12px', height: '40px' }}
+                      />
+                    </div>
 
-      {/* ================================================================= */}
-      {/* 🏷️ MODAL: CONFIGURAR DESCUENTO DE PRODUCTO */}
-      {/* ================================================================= */}
-      {showDiscountModal && discountProduct && (
-        <div className="modal-overlay" onClick={() => !discountLoading && setShowDiscountModal(false)}>
-          <form 
-            className="modal-card animate-fade-in" 
-            onSubmit={handleSaveDiscount}
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '480px', width: '92%', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)' }}
-          >
-            {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '19px',
-                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)'
-                }}>
-                  🏷️
-                </div>
-                <div>
-                  <h3 className="modal-title" style={{ fontSize: '17px', fontWeight: '900', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
-                    Descuento / Promoción
-                  </h3>
-                  <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
-                    {discountProduct.nombre}
-                  </p>
-                </div>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setShowDiscountModal(false)}
-                disabled={discountLoading}
-                style={{ 
-                  border: 'none', 
-                  background: '#e2e8f0', 
-                  width: '30px', 
-                  height: '30px', 
-                  borderRadius: '50%', 
-                  fontSize: '13px', 
-                  cursor: 'pointer',
-                  color: '#475569',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
-            </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
+                        Monto del Ingreso (COP) *
+                      </label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <span style={{ position: 'absolute', left: '12px', fontSize: '14px', color: '#64748b', fontWeight: '800', pointerEvents: 'none' }}>$</span>
+                        <input 
+                          type="text" 
+                          className="input-control" 
+                          value={formatNumberWithDots(newIncomeAmount)}
+                          onChange={(e) => setNewIncomeAmount(parseFormattedNumber(e.target.value))}
+                          required
+                          style={{ fontSize: '16px', fontWeight: '800', padding: '0 12px 0 28px', height: '40px', color: '#059669' }}
+                        />
+                      </div>
+                    </div>
 
-            {/* Modal Body */}
-            <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              
-              {/* Product Info & Original Price */}
-              <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700' }}>Precio Base Actual</span>
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
-                    {formatCOP(discountProduct.precioVenta)} <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{getPriceUnitLabel(discountProduct.unidadMedida)}</span>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: '700', fontSize: '12.5px', color: '#1e293b' }}>
+                        Método de Pago Recibido *
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setNewIncomePaymentMethod('Efectivo')}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            border: newIncomePaymentMethod === 'Efectivo' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                            background: newIncomePaymentMethod === 'Efectivo' ? '#ecfdf5' : '#f8fafc',
+                            color: newIncomePaymentMethod === 'Efectivo' ? '#047857' : '#334155',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontWeight: '800',
+                            fontSize: '13px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span>💵</span> Efectivo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewIncomePaymentMethod('Transferencia')}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            border: newIncomePaymentMethod === 'Transferencia' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                            background: newIncomePaymentMethod === 'Transferencia' ? '#eff6ff' : '#f8fafc',
+                            color: newIncomePaymentMethod === 'Transferencia' ? '#1e40af' : '#334155',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontWeight: '800',
+                            fontSize: '13px',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span>📲</span> Transferencia
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <span className="badge" style={{ background: '#e2e8f0', color: '#334155', fontWeight: '700', padding: '4px 10px' }}>
-                  {discountProduct.categoria}
-                </span>
-              </div>
 
-              {/* Quick Percent Buttons */}
-              <div>
-                <label style={{ fontSize: '11.5px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: '8px', letterSpacing: '0.3px' }}>
-                  Selecciona un porcentaje rápido:
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                  {[0, 5, 10, 15, 20, 25, 30, 50].map(pct => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => setDiscountPercent(pct)}
-                      style={{
-                        padding: '7px 4px',
-                        borderRadius: '10px',
-                        border: discountPercent === pct ? '2px solid #dc2626' : '1px solid #cbd5e1',
-                        background: discountPercent === pct ? '#fee2e2' : '#ffffff',
-                        color: discountPercent === pct ? '#991b1b' : '#334155',
+                  <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowAddIncomeModal(false)} 
+                      disabled={addIncomeSubmitting}
+                      style={{ padding: '8px 16px', fontSize: '12.5px' }}
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="btn btn-success" 
+                      disabled={addIncomeSubmitting}
+                      style={{ 
+                        padding: '8px 18px', 
+                        fontSize: '12.5px', 
                         fontWeight: '800',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        opacity: addIncomeSubmitting ? 0.65 : 1,
+                        cursor: addIncomeSubmitting ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      {pct === 0 ? '0% (Sin Dcto)' : `${pct}% OFF`}
+                      {addIncomeSubmitting ? '⏳ Asentando Ingreso...' : '✓ Asentar Ingreso'}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom Input Field */}
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" style={{ fontWeight: '700', fontSize: '13px', color: '#1e293b' }}>
-                  O escribe un porcentaje personalizado (%):
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input 
-                    type="number" 
-                    min="0"
-                    max="100"
-                    step="1"
-                    className="input-control" 
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-                    style={{ fontSize: '18px', fontWeight: '900', height: '42px', textAlign: 'center', color: '#dc2626' }}
-                  />
-                  <span style={{ position: 'absolute', right: '16px', fontSize: '16px', fontWeight: '900', color: '#dc2626', pointerEvents: 'none' }}>%</span>
-                </div>
-              </div>
-
-              {/* Live Calculation Preview */}
-              {(() => {
-                const originalPrice = Number(discountProduct.precioVenta) || 0
-                const savings = (originalPrice * discountPercent) / 100
-                const finalPrice = originalPrice - savings
-                const uLabel = getPriceUnitLabel(discountProduct.unidadMedida)
-
-                return (
-                  <div style={{
-                    background: discountPercent > 0 ? 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' : '#f8fafc',
-                    border: discountPercent > 0 ? '1.5px solid #fca5a5' : '1px solid #e2e8f0',
-                    borderRadius: '14px',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700', display: 'block' }}>
-                        {discountPercent > 0 ? `🔥 Ahorro: -${formatCOP(savings)} ${uLabel}` : 'Sin descuento'}
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>
-                        Precio Final a Cobrar:
-                      </span>
-                    </div>
-                    <strong style={{ fontSize: '20px', fontWeight: '900', color: discountPercent > 0 ? '#dc2626' : '#0f172a' }}>
-                      {formatCOP(finalPrice)} <span style={{ fontSize: '12px', fontWeight: '600' }}>{uLabel}</span>
-                    </strong>
                   </div>
-                )
-              })()}
+                </form>
+              )}
             </div>
-
-            {/* Modal Footer */}
-            <div className="modal-footer" style={{ padding: '14px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowDiscountModal(false)} disabled={discountLoading}>
-                Cancelar
-              </button>
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                disabled={discountLoading} 
-                style={{ 
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', 
-                  borderColor: '#dc2626',
-                  fontWeight: '800',
-                  padding: '9px 18px',
-                  borderRadius: '10px'
-                }}
-              >
-                {discountLoading ? 'Guardando...' : '✓ Guardar Descuento'}
-              </button>
-            </div>
-          </form>
+            )}
+          </div>
         </div>
       )}
 
@@ -7269,7 +7066,7 @@ function App() {
             style={{ 
               maxWidth: '560px', 
               width: '94%', 
-              maxHeight: '92vh',
+              maxHeight: 'calc(100vh - 28px)',
               display: 'flex',
               flexDirection: 'column',
               borderRadius: '20px', 
@@ -7278,7 +7075,7 @@ function App() {
             }}
           >
             {/* Header */}
-            <div className="modal-header" style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
                   width: '36px',
@@ -7325,7 +7122,7 @@ function App() {
             </div>
 
             {/* Body */}
-            <div className="modal-body" style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '11px', overflowY: 'auto', maxHeight: 'calc(92vh - 118px)' }}>
+            <div className="modal-body" style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '11px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               {/* Nombre */}
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label" style={{ fontWeight: '700', fontSize: '12px', color: '#1e293b', marginBottom: '3px' }}>
@@ -7583,9 +7380,9 @@ function App() {
           <div 
             className="modal-card animate-fade-in" 
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '460px', width: '92%', borderRadius: '20px', overflow: 'hidden' }}
+            style={{ maxWidth: '460px', width: '92%', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', borderRadius: '20px', overflow: 'hidden' }}
           >
-            <div className="modal-header" style={{ padding: '18px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   width: '40px',
@@ -7616,8 +7413,8 @@ function App() {
                 style={{ 
                   border: 'none', 
                   background: '#e2e8f0', 
-                  width: '32px',
-                  height: '32px',
+                  width: '32px', 
+                  height: '32px', 
                   borderRadius: '50%', 
                   fontSize: '14px', 
                   cursor: 'pointer', 
@@ -7631,7 +7428,7 @@ function App() {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px 24px' }}>
+            <div className="modal-body" style={{ padding: '18px 22px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               <div className="receipt-wrapper" style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '18px' }}>
                 <div className="receipt-header" style={{ textAlign: 'center', marginBottom: '14px', borderBottom: '1px dashed #cbd5e1', paddingBottom: '12px' }}>
                   <div style={{ fontSize: '16px', fontWeight: '900', color: '#0f172a' }}>EL BUEN CORTE</div>
@@ -7681,7 +7478,7 @@ function App() {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center' }}>
+            <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
               <button 
                 type="button"
                 className="btn btn-primary" 
@@ -8154,13 +7951,16 @@ function App() {
             style={{ 
               maxWidth: '560px', 
               width: '94%', 
+              maxHeight: 'calc(100vh - 28px)',
+              display: 'flex',
+              flexDirection: 'column',
               borderRadius: '22px', 
               overflow: 'hidden',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.28)'
             }}
           >
             {/* Modal Header */}
-            <div className="modal-header" style={{ padding: '20px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-header" style={{ padding: '16px 22px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{
                   width: '42px',
@@ -8216,7 +8016,7 @@ function App() {
             </div>
 
             {/* Modal Body */}
-            <div className="modal-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               
               {/* Info del Cliente */}
               <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 18px', border: '1px solid #e2e8f0' }}>
@@ -8347,7 +8147,7 @@ function App() {
             </div>
 
             {/* Modal Footer */}
-            <div className="modal-footer" style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="modal-footer" style={{ padding: '14px 22px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <button 
                 type="button" 
                 className="btn btn-secondary" 
