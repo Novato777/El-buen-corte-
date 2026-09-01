@@ -976,11 +976,24 @@ app.get('/api/public/productos', async (req, res) => {
     let params = [];
 
     if (targetTenant) {
-      query += ' WHERE tenant_id = $1';
-      params.push(targetTenant);
+      if (/^\d+$/.test(String(targetTenant).trim())) {
+        query += ' WHERE tenant_id = $1';
+        params.push(Number(targetTenant));
+      } else {
+        const userRes = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [String(targetTenant).trim()]);
+        if (userRes.rows.length > 0) {
+          query += ' WHERE tenant_id = $1';
+          params.push(userRes.rows[0].id);
+        } else {
+          const firstTenantCheck = await pool.query("SELECT tenant_id FROM inventario WHERE tenant_id IS NOT NULL GROUP BY tenant_id ORDER BY COUNT(*) DESC LIMIT 1");
+          const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;
+          query += ' WHERE tenant_id = $1';
+          params.push(defaultTenant);
+        }
+      }
     } else {
-      // Si no se especifica tenant, usar el primer tenant disponible en la base de datos
-      const firstTenantCheck = await pool.query("SELECT tenant_id FROM inventario WHERE tenant_id IS NOT NULL ORDER BY tenant_id ASC LIMIT 1");
+      // Si no se especifica tenant, usar el tenant con más productos o el primero disponible
+      const firstTenantCheck = await pool.query("SELECT tenant_id FROM inventario WHERE tenant_id IS NOT NULL GROUP BY tenant_id ORDER BY COUNT(*) DESC LIMIT 1");
       const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;
       query += ' WHERE tenant_id = $1';
       params.push(defaultTenant);
@@ -1018,8 +1031,21 @@ app.get('/api/public/perfil', async (req, res) => {
     let params = [];
 
     if (targetTenant) {
-      query += ' WHERE tenant_id = $1';
-      params.push(targetTenant);
+      if (/^\d+$/.test(String(targetTenant).trim())) {
+        query += ' WHERE tenant_id = $1';
+        params.push(Number(targetTenant));
+      } else {
+        const userRes = await pool.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [String(targetTenant).trim()]);
+        if (userRes.rows.length > 0) {
+          query += ' WHERE tenant_id = $1';
+          params.push(userRes.rows[0].id);
+        } else {
+          const firstTenantCheck = await pool.query("SELECT tenant_id FROM business_profile WHERE tenant_id IS NOT NULL ORDER BY tenant_id ASC LIMIT 1");
+          const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;
+          query += ' WHERE tenant_id = $1';
+          params.push(defaultTenant);
+        }
+      }
     } else {
       const firstTenantCheck = await pool.query("SELECT tenant_id FROM business_profile WHERE tenant_id IS NOT NULL ORDER BY tenant_id ASC LIMIT 1");
       const defaultTenant = firstTenantCheck.rows[0]?.tenant_id || 1;

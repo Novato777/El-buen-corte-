@@ -2552,11 +2552,11 @@ function App() {
             </button>
             <div className="navbar-title">
               {activeTab === 'resumen' && 'Resumen Operativo'}
-              {activeTab === 'tienda' && 'Tienda Virtual — El Buen Corte'}
-              {activeTab === 'pedidos' && 'Panel de Pedidos'}
-              {activeTab === 'inventario' && 'Control de Inventario y Mermas'}
-              {activeTab === 'calculadora' && 'Cálculo Inteligente de Aprovechamiento'}
-              {activeTab === 'contabilidad' && 'Cierre de Caja y Contabilidad'}
+              {activeTab === 'tienda' && 'Tienda Virtual'}
+              {activeTab === 'pedidos' && 'Gestión de Pedidos'}
+              {activeTab === 'inventario' && 'Inventario & Mermas'}
+              {activeTab === 'calculadora' && 'Calculadora de Res'}
+              {activeTab === 'contabilidad' && 'Caja & Contabilidad'}
               {activeTab === 'perfil' && 'Perfil del Negocio'}
             </div>
           </div>
