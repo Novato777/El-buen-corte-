@@ -291,8 +291,8 @@ export function BrandLogoSvg({ className = "w-6 h-6", style = {} }) {
   )
 }
 
-// 🥩 Marca de agua sutil para fondos de cards, dashboards y estados vacíos
-export function BrandWatermark({ size = 120, opacity = 0.05, style = {}, className = "" }) {
+// 🥩 Marca de agua para fondos de cards, dashboards y estados vacíos
+export function BrandWatermark({ size = 140, opacity = 0.12, style = {}, className = "" }) {
   return (
     <div 
       className={`brand-watermark-wrapper ${className}`}
@@ -306,17 +306,13 @@ export function BrandWatermark({ size = 120, opacity = 0.05, style = {}, classNa
       }}
       aria-hidden="true"
     >
-      <svg 
-        xmlns="http://www.w3.org/2000/svg" 
-        viewBox="0 0 32 32" 
+      <img 
+        src="/icon-192.png" 
+        alt="" 
         width={size} 
         height={size}
-      >
-        <rect width="32" height="32" rx="7" fill="#160d0b" />
-        <path d="M9 19c0-3.9 3.1-7 7-7s7 3.1 7 7-3.1 6-7 6-7-2.1-7-6z" fill="#dc2626" />
-        <circle cx="13.5" cy="18" r="2.2" fill="#f3e9dc" />
-        <path d="M16 5c1.5 1.5 1.5 3 .6 4.2M19 6c1 1.3 1 2.6.2 3.6" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round" fill="none" />
-      </svg>
+        style={{ objectFit: 'contain', filter: 'grayscale(100%) opacity(0.8) drop-shadow(0px 0px 4px rgba(0,0,0,0.1))' }}
+      />
     </div>
   )
 }

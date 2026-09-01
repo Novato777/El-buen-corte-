@@ -2715,43 +2715,39 @@ function App() {
               {/* Metrics cards */}
               <div className="grid-metrics">
                 <div className="card metric-card card-tint-blue">
-                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
+                  <BrandWatermark size={130} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-title">Ventas del Día <span className="nav-icon"><DollarIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-blue)' }}>{formatCOP(totalVentasHoy)}</div>
                   <div className="metric-footer">
                     <span className="metric-trend-up">↑ 12%</span> respecto a promedio diario
                   </div>
-                  <div className="metric-icon-bg" style={{ color: 'var(--accent-blue)' }}><DollarIcon /></div>
                 </div>
 
                 <div className="card metric-card card-tint-gold">
-                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
+                  <BrandWatermark size={130} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-title">Pedidos Activos <span className="nav-icon"><ClipboardIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-gold)' }}>{pedidosPendientesCount}</div>
                   <div className="metric-footer">
                     <span>{pedidos.filter(p => p.estado === 'Entregado').length} entregados hoy</span>
                   </div>
-                  <div className="metric-icon-bg" style={{ color: 'var(--accent-gold)' }}><ClipboardIcon /></div>
                 </div>
 
                 <div className="card metric-card card-tint-red">
-                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
+                  <BrandWatermark size={130} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-title">Egresos Hoy <span className="nav-icon"><DollarIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-red)' }}>{formatCOP(totalEgresosHoy)}</div>
                   <div className="metric-footer">
                     <span style={{ color: 'var(--accent-red)' }}>Egreso neto</span> compras y mermas
                   </div>
-                  <div className="metric-icon-bg" style={{ color: 'var(--accent-red)' }}><DollarIcon /></div>
                 </div>
 
                 <div className="card metric-card card-tint-green">
-                  <BrandWatermark size={115} opacity={0.04} style={{ right: '-15px', bottom: '-15px', transform: 'rotate(-8deg)' }} />
+                  <BrandWatermark size={130} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-title">Saldo Efectivo Caja <span className="nav-icon"><BoxIcon /></span></div>
                   <div className="metric-value" style={{ color: 'var(--accent-green)' }}>{formatCOP(saldoCajaActual)}</div>
                   <div className="metric-footer">
                     <span>Base: {formatCOP(cajaBase)}</span>
                   </div>
-                  <div className="metric-icon-bg" style={{ color: 'var(--accent-green)' }}><BoxIcon /></div>
                 </div>
               </div>
 
@@ -2759,8 +2755,8 @@ function App() {
               <div className="grid-dashboard-main">
                 {/* Column Left: Actions and lists */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  <div className="card">
-                    <BrandWatermark size={130} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
+                  <div className="card card-tint-blue" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #eff6ff 100%)' }}>
+                    <BrandWatermark size={160} style={{ right: '5px', bottom: '5px', transform: 'rotate(-5deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-red)' }}><BoltIcon /></div>
                     <h3 className="card-title" style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '18px' }}>
                       Acciones Rápidas
@@ -2804,8 +2800,8 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="card">
-                    <BrandWatermark size={130} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
+                  <div className="card card-tint-gold" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #fffbeb 100%)' }}>
+                    <BrandWatermark size={160} style={{ right: '5px', bottom: '5px', transform: 'rotate(-5deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-gold)' }}><ClockIcon /></div>
                     <div className="card-title">
                       Pedidos Pendientes Recientes
@@ -2854,10 +2850,10 @@ function App() {
                   </div>
                 </div>
 
-                {/* Column Right: Recent Activity Log */}
-                <div className="card" style={{ height: '100%' }}>
-                  <BrandWatermark size={140} opacity={0.03} style={{ right: '15px', bottom: '15px', transform: 'rotate(-10deg)' }} />
-                  <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
+                {/* Column Right: Transacciones */}
+                <div className="card card-tint-green" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #f0fdf4 100%)' }}>
+                  <BrandWatermark size={180} style={{ right: '10px', bottom: '10px', transform: 'rotate(-5deg)' }} />
+                  <div className="card-watermark-icon" style={{ color: 'var(--accent-green)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Transacciones del Turno</h3>
                   {transacciones.length === 0 ? (
                     <EmptyState 
@@ -2902,8 +2898,10 @@ function App() {
           {/* 🛒 TAB: GESTIÓN DE PEDIDOS */}
           {/* ================================================================= */}
           {activeTab === 'pedidos' && (
-            <div>
-              <div className="filters-row">
+            <div className="card card-tint-gold" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #fffbeb 100%)' }}>
+              <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
+              
+              <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', zIndex: 1 }}>
                 <div className="filter-tabs">
                   {[
                     { id: 'Todos', label: 'Todos' },
@@ -3142,8 +3140,10 @@ function App() {
           {/* 📦 TAB: INVENTARIO & MERMAS */}
           {/* ================================================================= */}
           {activeTab === 'inventario' && (
-            <div>
-              <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+            <div className="card card-tint-red" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #fff1f2 100%)' }}>
+              <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
+              
+              <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', position: 'relative', zIndex: 1 }}>
                 <div className="filter-tabs">
                   {['Todos', 'Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
                     <button 
@@ -3301,11 +3301,12 @@ function App() {
           {/* 🧮 TAB: CALCULADORA DE RES */}
           {/* ================================================================= */}
           {activeTab === 'calculadora' && (
-            <div>
+            <div style={{ position: 'relative' }}>
               <div className="calc-res-grid">
                 {/* Inputs card */}
-                <div className="card">
-                  <div className="card-watermark-icon" style={{ color: 'var(--accent-green)' }}><ChartIcon /></div>
+                <div className="card card-tint-blue" style={{ background: 'linear-gradient(160deg, #ffffff 30%, #eff6ff 100%)' }}>
+                  <BrandWatermark size={180} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
+                  <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><ChartIcon /></div>
                   <h3 className="card-title" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
                     Variables de Desposte y Compra
                   </h3>
@@ -3451,7 +3452,9 @@ function App() {
                 </div>
 
                 {/* Outputs card */}
-                <div className="card">
+                <div className="card card-tint-green" style={{ background: 'linear-gradient(160deg, #ffffff 30%, #f0fdf4 100%)', position: 'relative', overflow: 'hidden' }}>
+                  <BrandWatermark size={200} style={{ right: '-10px', bottom: '-10px', transform: 'rotate(-5deg)' }} />
+                  <div className="card-watermark-icon" style={{ color: 'var(--accent-green)' }}><ScaleIcon /></div>
                   <h3 className="card-title">Resultado de Rendimiento Real</h3>
 
                   <div style={{ padding: '20px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.1), transparent)', border: '1px solid var(--accent-red)' }}>
@@ -3676,8 +3679,8 @@ function App() {
                 </div>
 
                 {/* Right side: transaction log list */}
-                <div className="card contabilidad-history-card">
-                  <BrandWatermark size={150} opacity={0.03} style={{ right: '20px', bottom: '20px', transform: 'rotate(-10deg)' }} />
+                <div className="card contabilidad-history-card card-tint-green" style={{ background: 'linear-gradient(160deg, #ffffff 20%, #f0fdf4 100%)' }}>
+                  <BrandWatermark size={250} style={{ right: '10px', bottom: '10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Historial de Transacciones del Turno</h3>
                   {transacciones.length === 0 ? (
@@ -3786,9 +3789,11 @@ function App() {
           {/* 🏢 TAB: PERFIL DEL NEGOCIO */}
           {/* ================================================================= */}
           {activeTab === 'perfil' && (
-            <div>
+            <div className="card card-tint-blue" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #eff6ff 100%)' }}>
+              <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
+              
               {hasUnsavedChanges && (
-                <div className="alert alert-warning animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '16px 20px', borderRadius: 'var(--radius-lg)' }}>
+                <div className="alert alert-warning animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '16px 20px', borderRadius: 'var(--radius-lg)', position: 'relative', zIndex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>⚠️</span>
                     <div>
@@ -3806,9 +3811,9 @@ function App() {
                 </div>
               )}
 
-              <div className="profile-layout">
+              <div className="profile-layout" style={{ position: 'relative', zIndex: 1 }}>
                 {/* Left menu column */}
-                <div className="card" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div className="card" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }}>
                   <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '12px 16px 8px' }}>
                     Secciones del Perfil
                   </h4>
