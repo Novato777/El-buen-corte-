@@ -1732,7 +1732,8 @@ form.modal-card,
 
   .top-navbar {
     padding: 0 20px !important;
-    height: 64px !important;
+    height: 70px !important;
+    min-height: 70px !important;
   }
 
   .page-container {
@@ -1740,26 +1741,546 @@ form.modal-card,
   }
 }
 
+/* Base styles for new components */
+.inventory-products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.inventory-card-item {
+  padding: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+}
+
+.inventory-card-media {
+  height: 175px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--border-color);
+}
+
+.inventory-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.inventory-discount-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background-color: #dc2626;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.45);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.inventory-category-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  color: var(--accent-gold);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.inventory-delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(220, 38, 38, 0.95);
+  color: #ffffff;
+  z-index: 3;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.45);
+  font-size: 11.5px;
+  font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.inventory-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  gap: 10px;
+}
+
+.inventory-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.inventory-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  min-height: 34px;
+}
+
+.inventory-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.inventory-price-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.inventory-old-price {
+  font-size: 11.5px;
+  color: #94a3b8;
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+
+.inventory-final-price {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent-gold);
+}
+
+.inventory-final-price.discount {
+  color: #dc2626;
+  font-weight: 900;
+}
+
+.inventory-stock-box {
+  text-align: right;
+}
+
+.inventory-stock-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.inventory-stock-val {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.inventory-stock-val.ok {
+  color: var(--accent-green);
+}
+
+.inventory-stock-val.low {
+  color: var(--accent-red);
+}
+
+.stock-critical-tag {
+  display: block;
+  font-size: 9px;
+  color: var(--accent-red);
+}
+
+.inventory-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inventory-action-btn {
+  flex: 1;
+  padding: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+.btn-danger-discount {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #dc2626 !important;
+}
+
+/* Orders Component */
+.orders-desktop-view {
+  display: block;
+}
+
+.orders-mobile-view {
+  display: none;
+}
+
+.mobile-order-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.mobile-order-code {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-right: 8px;
+}
+
+.mobile-order-date {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.mobile-order-client-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: #1e293b;
+}
+
+.mobile-order-items-box {
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mobile-order-item-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.mobile-order-item-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.mobile-order-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.mobile-order-total-val {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--accent-gold);
+}
+
+.mobile-order-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.mobile-order-btn {
+  flex: 1;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 10px;
+  justify-content: center;
+}
+
+.mobile-order-btn-charge {
+  flex: 1.5;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+  justify-content: center;
+}
+
+.mobile-order-btn-cancel {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 10px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mobile-order-status-pill {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.mobile-order-status-pill.success {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #d1fae5;
+}
+
+.mobile-order-status-pill.danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fee2e2;
+}
+
+/* Contabilidad Component */
+.contabilidad-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.contabilidad-actions-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-venta-pos {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border-color: #059669 !important;
+}
+
+.contabilidad-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 28px;
+  align-items: start;
+}
+
+.contabilidad-summary-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.caja-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.caja-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.summary-row-label {
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.summary-row-val {
+  font-size: 14.5px;
+}
+
+.summary-row-val.green {
+  color: var(--accent-green);
+}
+
+.summary-row-val.red {
+  color: var(--accent-red);
+}
+
+.caja-summary-row.total-row {
+  border-bottom: none;
+  padding-top: 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.total-saldo-val {
+  font-size: 19px;
+  color: var(--accent-gold);
+}
+
+.btn-export-pdf {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.transactions-desktop-view {
+  display: block;
+}
+
+.transactions-mobile-view {
+  display: none;
+}
+
+.mobile-transaction-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.mobile-trx-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.mobile-trx-icon.income {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.mobile-trx-icon.expense {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.mobile-trx-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-trx-desc {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-trx-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.mobile-trx-code {
+  font-weight: 700;
+  color: #475569;
+}
+
+.mobile-trx-payment {
+  text-transform: capitalize;
+}
+
+.mobile-trx-amount {
+  font-size: 14px;
+  font-weight: 800;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.mobile-trx-amount.income {
+  color: var(--accent-green);
+}
+
+.mobile-trx-amount.expense {
+  color: var(--accent-red);
+}
+
 @media (max-width: 768px) {
   .top-navbar {
-    height: 64px !important;
-    padding: 0 12px !important;
-    gap: 8px !important;
+    height: 70px !important;
+    min-height: 70px !important;
+    padding: 0 16px !important;
+    gap: 10px !important;
     background: #ffffff !important;
   }
 
   .navbar-title {
-    font-size: 15px !important;
+    font-size: 16px !important;
     font-weight: 800 !important;
     color: #0f172a !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    max-width: 145px !important;
+    max-width: 155px !important;
   }
 
   .navbar-actions {
-    gap: 6px !important;
+    gap: 8px !important;
   }
 
   .date-badge {
@@ -1767,11 +2288,11 @@ form.modal-card,
   }
 
   .caja-status {
-    padding: 4px 8px !important;
-    font-size: 11px !important;
+    padding: 5px 10px !important;
+    font-size: 11.5px !important;
     font-weight: 800 !important;
     border-radius: 9999px !important;
-    gap: 5px !important;
+    gap: 6px !important;
   }
 
   .caja-status-full {
@@ -1783,8 +2304,8 @@ form.modal-card,
   }
 
   .notification-bell-btn {
-    width: 36px !important;
-    height: 36px !important;
+    width: 38px !important;
+    height: 38px !important;
     border-radius: 10px !important;
     background: #f8fafc !important;
     border: 1px solid #e2e8f0 !important;
@@ -1799,9 +2320,9 @@ form.modal-card,
   }
 
   .auth-user-avatar {
-    width: 34px !important;
-    height: 34px !important;
-    font-size: 13.5px !important;
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 14px !important;
     font-weight: 800 !important;
   }
 
@@ -1810,7 +2331,7 @@ form.modal-card,
   }
 
   .page-container {
-    padding: 14px 10px 48px 10px !important;
+    padding: 14px 12px 48px 12px !important;
   }
 
   .card {
@@ -1907,6 +2428,153 @@ form.modal-card,
   .data-table th,
   .data-table td {
     padding: 8px 10px !important;
+  }
+
+  /* Inventario 2 Cards per row on mobile */
+  .inventory-products-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .inventory-card-item {
+    border-radius: 14px !important;
+  }
+
+  .inventory-card-media {
+    height: 115px !important;
+  }
+
+  .inventory-card-body {
+    padding: 10px !important;
+    gap: 6px !important;
+  }
+
+  .inventory-card-title {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+  }
+
+  .inventory-card-desc {
+    display: none !important;
+  }
+
+  .inventory-card-meta {
+    padding-top: 6px !important;
+  }
+
+  .inventory-price-label {
+    font-size: 9px !important;
+  }
+
+  .inventory-final-price {
+    font-size: 13.5px !important;
+    font-weight: 900 !important;
+  }
+
+  .inventory-stock-val {
+    font-size: 12.5px !important;
+  }
+
+  .inventory-delete-btn {
+    padding: 4px 6px !important;
+    border-radius: 8px !important;
+    top: 6px !important;
+    right: 6px !important;
+  }
+
+  .delete-btn-text {
+    display: none !important;
+  }
+
+  .inventory-discount-badge {
+    top: 6px !important;
+    left: 6px !important;
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+
+  .inventory-category-badge {
+    bottom: 6px !important;
+    left: 6px !important;
+    padding: 2px 6px !important;
+    font-size: 9.5px !important;
+  }
+
+  .inventory-card-actions {
+    flex-direction: column !important;
+    gap: 5px !important;
+    margin-top: 4px !important;
+  }
+
+  .inventory-action-btn {
+    padding: 5px !important;
+    font-size: 11px !important;
+  }
+
+  /* Pedidos view toggling */
+  .orders-desktop-view {
+    display: none !important;
+  }
+
+  .orders-mobile-view {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Contabilidad view toggling & mobile layout */
+  .contabilidad-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .contabilidad-actions-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .btn-venta-pos {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    height: 44px !important;
+    font-size: 14px !important;
+    justify-content: center !important;
+  }
+
+  .btn-egreso {
+    width: 100% !important;
+    height: 40px !important;
+    font-size: 12.5px !important;
+    justify-content: center !important;
+  }
+
+  .contabilidad-caja-btn-wrapper {
+    width: 100% !important;
+  }
+
+  .btn-cierre-caja,
+  .btn-abrir-caja {
+    width: 100% !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+  }
+
+  .contabilidad-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .transactions-desktop-view {
+    display: none !important;
+  }
+
+  .transactions-mobile-view {
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   /* Profile Layout */

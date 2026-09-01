@@ -2953,133 +2953,186 @@ function App() {
                     }
                   />
                 ) : (
-                  <div className="table-container table-scrollable">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Código</th>
-                          <th>Cliente</th>
-                          <th>Fecha</th>
-                          <th>Cortes Solicitados</th>
-                          <th>Total</th>
-                          <th>Estado</th>
-                          <th style={{ textAlign: 'right' }}>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pedidos
-                          .filter(p => orderFilter === 'Todos' || p.estado === orderFilter)
-                          .map(p => (
-                            <tr key={p.id}>
-                              <td style={{ fontWeight: '700' }}>{p.id}</td>
-                              <td style={{ fontWeight: '600' }}>{p.cliente}</td>
-                              <td style={{ color: 'var(--text-muted)' }}>{p.fecha}</td>
-                              <td>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                  {p.items.map((i, idx) => (
-                                    <span key={idx} style={{ fontSize: '13px' }}>
-                                      • {formatStockDisplay(i.cantidad, i.unidad || 'kg')} de <strong>{i.nombre}</strong>
-                                    </span>
-                                  ))}
+                  <>
+                    {/* Desktop View: Full data table */}
+                    <div className="orders-desktop-view table-container table-scrollable">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Código</th>
+                            <th>Cliente</th>
+                            <th>Fecha</th>
+                            <th>Cortes Solicitados</th>
+                            <th>Total</th>
+                            <th>Estado</th>
+                            <th style={{ textAlign: 'right' }}>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pedidos
+                            .filter(p => orderFilter === 'Todos' || p.estado === orderFilter)
+                            .map(p => (
+                              <tr key={p.id}>
+                                <td style={{ fontWeight: '700' }}>{p.id}</td>
+                                <td style={{ fontWeight: '600' }}>{p.cliente}</td>
+                                <td style={{ color: 'var(--text-muted)' }}>{p.fecha}</td>
+                                <td>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    {p.items.map((i, idx) => (
+                                      <span key={idx} style={{ fontSize: '13px' }}>
+                                        • {formatStockDisplay(i.cantidad, i.unidad || 'kg')} de <strong>{i.nombre}</strong>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCOP(p.total)}</td>
+                                <td>
+                                  <span className={`badge ${
+                                    p.estado === 'Pendiente' ? 'badge-pending' : 
+                                    p.estado === 'Entregado' ? 'badge-success' : 'badge-danger'
+                                  }`}>
+                                    <span className="badge-dot" />
+                                    {p.estado}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                    <button 
+                                      type="button" 
+                                      className="btn btn-secondary"
+                                      style={{ padding: '5px 12px', fontSize: '11.5px', borderRadius: '20px' }}
+                                      onClick={() => setSelectedOrderDetail(p)}
+                                      title="Ver qué pidió el cliente para preparar y despachar"
+                                    >
+                                      👁️ Ver Pedido
+                                    </button>
+                                    {p.estado === 'Pendiente' && (
+                                      <>
+                                        <button 
+                                          type="button" 
+                                          className="btn btn-primary"
+                                          style={{ 
+                                            padding: '5px 14px', 
+                                            fontSize: '11.5px', 
+                                            borderRadius: '20px',
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            border: 'none',
+                                            color: '#ffffff'
+                                          }} 
+                                          onClick={() => handleOpenChargeOrderModal(p)}
+                                          title="Cobrar pedido y registrar venta en contabilidad"
+                                        >
+                                          💳 Cobrar & Entregar
+                                        </button>
+                                        <button 
+                                          type="button" 
+                                          className="btn btn-danger"
+                                          style={{ padding: '5px 11px', fontSize: '11.5px', borderRadius: '20px' }}
+                                          onClick={() => handleCancelOrder(p.id)}
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </>
+                                    )}
+                                    {p.estado === 'Entregado' && (
+                                      <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#059669', background: '#ecfdf5', padding: '4px 10px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
+                                        ✓ Pagado en caja
+                                      </span>
+                                    )}
+                                    {p.estado === 'Cancelado' && (
+                                      <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+                                        ✕ Pedido anulado
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile View: Dedicated intuitive Operator Order Cards */}
+                    <div className="orders-mobile-view">
+                      {pedidos
+                        .filter(p => orderFilter === 'Todos' || p.estado === orderFilter)
+                        .map(p => (
+                          <div className="mobile-order-card" key={p.id}>
+                            <div className="mobile-order-card-header">
+                              <div>
+                                <span className="mobile-order-code">{p.id}</span>
+                                <span className="mobile-order-date">{p.fecha}</span>
+                              </div>
+                              <span className={`badge ${
+                                p.estado === 'Pendiente' ? 'badge-pending' : 
+                                p.estado === 'Entregado' ? 'badge-success' : 'badge-danger'
+                              }`}>
+                                <span className="badge-dot" />
+                                {p.estado}
+                              </span>
+                            </div>
+
+                            <div className="mobile-order-client-row">
+                              <span className="client-icon">👤</span>
+                              <strong>{p.cliente}</strong>
+                            </div>
+
+                            <div className="mobile-order-items-box">
+                              {p.items.map((i, idx) => (
+                                <div key={idx} className="mobile-order-item-line">
+                                  <span>• {formatStockDisplay(i.cantidad, i.unidad || 'kg')} de <strong>{i.nombre}</strong></span>
+                                  <span className="mobile-order-item-sub">{formatCOP(i.precio * i.cantidad)}</span>
                                 </div>
-                              </td>
-                              <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{formatCOP(p.total)}</td>
-                              <td>
-                                <span className={`badge ${
-                                  p.estado === 'Pendiente' ? 'badge-pending' : 
-                                  p.estado === 'Entregado' ? 'badge-success' : 'badge-danger'
-                                }`}>
-                                  <span className="badge-dot" />
-                                  {p.estado}
-                                </span>
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              ))}
+                            </div>
+
+                            <div className="mobile-order-total-row">
+                              <span>Total a cobrar:</span>
+                              <span className="mobile-order-total-val">{formatCOP(p.total)}</span>
+                            </div>
+
+                            <div className="mobile-order-actions-row">
+                              <button 
+                                type="button" 
+                                className="btn btn-secondary mobile-order-btn"
+                                onClick={() => setSelectedOrderDetail(p)}
+                              >
+                                👁️ Ver Detalle
+                              </button>
+                              {p.estado === 'Pendiente' && (
+                                <>
                                   <button 
                                     type="button" 
-                                    style={{ 
-                                      padding: '5px 12px', 
-                                      fontSize: '11.5px', 
-                                      fontWeight: '700', 
-                                      borderRadius: '20px',
-                                      background: '#f8fafc',
-                                      border: '1px solid #cbd5e1',
-                                      color: '#334155',
-                                      display: 'inline-flex', 
-                                      alignItems: 'center', 
-                                      gap: '5px',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.15s ease',
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                                    }} 
-                                    onClick={() => setSelectedOrderDetail(p)}
-                                    title="Ver qué pidió el cliente para preparar y despachar"
+                                    className="btn btn-primary mobile-order-btn-charge"
+                                    onClick={() => handleOpenChargeOrderModal(p)}
                                   >
-                                    👁️ Ver Pedido
+                                    💳 Cobrar & Entregar
                                   </button>
-                                  {p.estado === 'Pendiente' && (
-                                    <>
-                                      <button 
-                                        type="button" 
-                                        style={{ 
-                                          padding: '5px 14px', 
-                                          fontSize: '11.5px', 
-                                          fontWeight: '700',
-                                          borderRadius: '20px',
-                                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                                          border: 'none', 
-                                          color: '#ffffff', 
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '5px',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease',
-                                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.28)'
-                                        }} 
-                                        onClick={() => handleOpenChargeOrderModal(p)}
-                                        title="Cobrar pedido y registrar venta en contabilidad"
-                                      >
-                                        💳 Cobrar & Entregar
-                                      </button>
-                                      <button 
-                                        type="button" 
-                                        style={{ 
-                                          padding: '5px 11px', 
-                                          fontSize: '11.5px', 
-                                          fontWeight: '700',
-                                          borderRadius: '20px',
-                                          background: '#fef2f2',
-                                          border: '1px solid #fecaca',
-                                          color: '#dc2626',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease'
-                                        }} 
-                                        onClick={() => handleCancelOrder(p.id)}
-                                      >
-                                        Cancelar
-                                      </button>
-                                    </>
-                                  )}
-                                  {p.estado === 'Entregado' && (
-                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#059669', background: '#ecfdf5', padding: '4px 10px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
-                                      ✓ Pagado en caja
-                                    </span>
-                                  )}
-                                  {p.estado === 'Cancelado' && (
-                                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '4px 10px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
-                                      ✕ Pedido anulado
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
+                                  <button 
+                                    type="button" 
+                                    className="btn btn-danger mobile-order-btn-cancel"
+                                    onClick={() => handleCancelOrder(p.id)}
+                                    title="Cancelar pedido"
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              )}
+                              {p.estado === 'Entregado' && (
+                                <span className="mobile-order-status-pill success">
+                                  ✓ Entregado y cobrado
+                                </span>
+                              )}
+                              {p.estado === 'Cancelado' && (
+                                <span className="mobile-order-status-pill danger">
+                                  ✕ Pedido cancelado
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -3129,7 +3182,7 @@ function App() {
                       }
                     />
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
+                    <div className="inventory-products-grid">
                       {filteredInventario.map(item => {
                         const isLow = item.stock <= item.limiteMin
                         const hasDiscount = Number(item.descuento) > 0
@@ -3138,140 +3191,83 @@ function App() {
                           : item.precioVenta
 
                         return (
-                          <div className="card product-card" key={item.id} style={{ padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', borderRadius: '18px', border: '1px solid var(--border-color)', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                          <div className="card product-card inventory-card-item" key={item.id}>
                             {/* Product Photo & Overlays */}
-                            <div style={{ height: '175px', width: '100%', position: 'relative', overflow: 'hidden', backgroundColor: 'var(--border-color)' }}>
+                            <div className="inventory-card-media">
                               <img 
                                 src={item.foto || 'https://images.unsplash.com/photo-1603048588665-791ca8aea617?w=300'} 
                                 alt={item.nombre}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
                                 className="product-image-hover"
                               />
 
                               {/* Discount Badge on Top-Left */}
                               {hasDiscount && (
-                                <span 
-                                  style={{ 
-                                    position: 'absolute', 
-                                    top: '10px', 
-                                    left: '10px', 
-                                    backgroundColor: '#dc2626', 
-                                    color: '#ffffff',
-                                    fontWeight: '900',
-                                    fontSize: '11px',
-                                    padding: '4px 8px',
-                                    borderRadius: '8px',
-                                    zIndex: 2,
-                                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.45)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '3px'
-                                  }}
-                                >
+                                <span className="inventory-discount-badge">
                                   🔥 {item.descuento}% OFF
                                 </span>
                               )}
 
                               {/* Category Badge */}
-                              <span 
-                                className="badge"
-                                style={{ 
-                                  position: 'absolute', 
-                                  bottom: '12px', 
-                                  left: '12px', 
-                                  backgroundColor: 'rgba(0,0,0,0.75)', 
-                                  backdropFilter: 'blur(6px)',
-                                  color: 'var(--accent-gold)',
-                                  fontWeight: '700',
-                                  fontSize: '11px',
-                                  padding: '4px 10px',
-                                  borderRadius: '8px'
-                                }}
-                              >
+                              <span className="inventory-category-badge">
                                 {item.categoria}
                               </span>
 
                               {/* Red Delete Button Overlay */}
                               <button 
-                                type="button"
+                                type="button" 
+                                className="inventory-delete-btn"
                                 onClick={() => handleDeleteProduct(item.id)}
-                                style={{ 
-                                  position: 'absolute', 
-                                  top: '10px', 
-                                  right: '10px', 
-                                  backgroundColor: 'rgba(220, 38, 38, 0.95)', 
-                                  color: '#ffffff',
-                                  zIndex: 3,
-                                  border: '1.5px solid rgba(255,255,255,0.9)',
-                                  borderRadius: '10px',
-                                  padding: '6px 10px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.45)',
-                                  fontSize: '11.5px',
-                                  fontWeight: '800',
-                                  transition: 'all 0.2s ease'
-                                }}
                                 title="Eliminar producto"
                               >
                                 <TrashIcon className="h-3.5 w-3.5" />
-                                <span>Eliminar</span>
+                                <span className="delete-btn-text">Eliminar</span>
                               </button>
                             </div>
 
                             {/* Card Content */}
-                            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flexGrow: 1, gap: '10px' }}>
-                              <h4 style={{ margin: '0', fontSize: '16px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                            <div className="inventory-card-body">
+                              <h4 className="inventory-card-title">
                                 {item.nombre}
                               </h4>
                               
-                              <p style={{ margin: '0', fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4', minHeight: '34px' }}>
+                              <p className="inventory-card-desc">
                                 {item.descripcion || 'Sin descripción disponible.'}
                               </p>
 
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+                              <div className="inventory-card-meta">
                                 <div>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>
+                                  <div className="inventory-price-label">
                                     Precio {getPriceUnitLabel(item.unidadMedida)}
                                   </div>
                                   {hasDiscount ? (
                                     <div>
-                                      <span style={{ fontSize: '11.5px', color: '#94a3b8', textDecoration: 'line-through', marginRight: '6px' }}>
+                                      <span className="inventory-old-price">
                                         {formatCOP(item.precioVenta)}
                                       </span>
-                                      <span style={{ fontSize: '16px', fontWeight: '900', color: '#dc2626' }}>
+                                      <span className="inventory-final-price discount">
                                         {formatCOP(finalPrice)}
                                       </span>
                                     </div>
                                   ) : (
-                                    <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent-gold)' }}>
+                                    <div className="inventory-final-price">
                                       {formatCOP(item.precioVenta)}
                                     </div>
                                   )}
                                 </div>
 
-                                <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '600' }}>Stock actual</div>
-                                  <div 
-                                    style={{ 
-                                      fontSize: '14px', 
-                                      fontWeight: '800', 
-                                      color: isLow ? 'var(--accent-red)' : 'var(--accent-green)' 
-                                    }}
-                                  >
+                                <div className="inventory-stock-box">
+                                  <div className="inventory-stock-label">Stock actual</div>
+                                  <div className={`inventory-stock-val ${isLow ? 'low' : 'ok'}`}>
                                     {formatStockDisplay(item.stock, item.unidadMedida)}
-                                    {isLow && <span style={{ display: 'block', fontSize: '9px', color: 'var(--accent-red)' }}>⚠️ Crítico</span>}
+                                    {isLow && <span className="stock-critical-tag">⚠️ Crítico</span>}
                                   </div>
                                 </div>
                               </div>
                               
                               {/* Stock & Discount Quick Actions */}
-                              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                              <div className="inventory-card-actions">
                                 <button 
-                                  className="btn btn-secondary" 
-                                  style={{ flex: 1, padding: '7px', fontSize: '11.5px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', borderRadius: '10px' }}
+                                  className="btn btn-secondary inventory-action-btn"
                                   onClick={() => {
                                     setNewStockProduct(item.id);
                                     setNewStockWeight(item.unidadMedida === 'und' ? 10 : 5);
@@ -3283,21 +3279,7 @@ function App() {
                                   📦 + Stock
                                 </button>
                                 <button 
-                                  className="btn btn-gold" 
-                                  style={{ 
-                                    flex: 1, 
-                                    padding: '7px', 
-                                    fontSize: '11.5px', 
-                                    fontWeight: '800', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center', 
-                                    gap: '4px', 
-                                    borderRadius: '10px',
-                                    background: hasDiscount ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : undefined,
-                                    color: hasDiscount ? '#ffffff' : undefined,
-                                    borderColor: hasDiscount ? '#dc2626' : undefined
-                                  }}
+                                  className={`btn ${hasDiscount ? 'btn-danger-discount' : 'btn-gold'} inventory-action-btn`}
                                   onClick={() => handleOpenDiscountModal(item)}
                                   title="Configurar porcentaje de descuento"
                                 >
@@ -3594,10 +3576,10 @@ function App() {
           {/* ================================================================= */}
           {activeTab === 'contabilidad' && (
             <div>
-              <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <div className="contabilidad-toolbar">
+                <div className="contabilidad-actions-group">
                   <button 
-                    className="btn btn-primary"
+                    className="btn btn-primary btn-venta-pos"
                     onClick={() => {
                       if(!isCajaAbierta) { alert('Abre la caja antes de registrar ventas o ingresos.'); return; }
                       setIncomeMode('pos')
@@ -3619,12 +3601,11 @@ function App() {
                       setNewIncomePaymentMethod('Efectivo')
                       setShowAddIncomeModal(true)
                     }}
-                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#059669' }}
                   >
                     <PlusIcon /> 🛒 Registrar Venta / Ingreso
                   </button>
                   <button 
-                    className="btn btn-secondary"
+                    className="btn btn-secondary btn-egreso"
                     onClick={() => {
                       if(!isCajaAbierta) { alert('Abre la caja antes de registrar egresos.'); return; }
                       setShowAddExpenseModal(true)
@@ -3633,70 +3614,69 @@ function App() {
                     <PlusIcon /> Registrar Egreso / Gasto
                   </button>
                 </div>
-                <div>
+                <div className="contabilidad-caja-btn-wrapper">
                   {isCajaAbierta ? (
-                    <button className="btn btn-gold" onClick={handleCloseCaja}>
+                    <button className="btn btn-gold btn-cierre-caja" onClick={handleCloseCaja}>
                       <WalletIcon /> Realizar Cierre de Caja
                     </button>
                   ) : (
-                    <button className="btn btn-primary" onClick={() => handleOpenCaja(300000)}>
+                    <button className="btn btn-primary btn-abrir-caja" onClick={() => handleOpenCaja(300000)}>
                       <StoreIcon /> Abrir Turno de Caja
                     </button>
                   )}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '32px', alignItems: 'start' }}>
+              <div className="contabilidad-grid-layout">
                 {/* Left side: caja summary */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  <div className="card">
+                <div className="contabilidad-summary-column">
+                  <div className="card contabilidad-summary-card">
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-green)' }}><WalletIcon /></div>
                     <h3 className="card-title">Resumen de Caja</h3>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Base Inicial</span>
-                        <strong>{formatCOP(cajaBase)}</strong>
+                    <div className="caja-summary-list">
+                      <div className="caja-summary-row">
+                        <span className="summary-row-label">Base Inicial</span>
+                        <strong className="summary-row-val">{formatCOP(cajaBase)}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>+ Ventas Cobradas</span>
-                        <strong style={{ color: 'var(--accent-green)' }}>+{formatCOP(totalVentasHoy)}</strong>
+                      <div className="caja-summary-row">
+                        <span className="summary-row-label">+ Ventas Cobradas</span>
+                        <strong className="summary-row-val green">+{formatCOP(totalVentasHoy)}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>- Egresos / Pagos</span>
-                        <strong style={{ color: 'var(--accent-red)' }}>-{formatCOP(totalEgresosHoy)}</strong>
+                      <div className="caja-summary-row">
+                        <span className="summary-row-label">- Egresos / Pagos</span>
+                        <strong className="summary-row-val red">-{formatCOP(totalEgresosHoy)}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', paddingTop: '8px' }}>
+                      <div className="caja-summary-row total-row">
                         <span>Saldo Neto en Caja</span>
-                        <strong style={{ color: 'var(--accent-gold)' }}>{formatCOP(saldoCajaActual)}</strong>
+                        <strong className="total-saldo-val">{formatCOP(saldoCajaActual)}</strong>
                       </div>
                     </div>
 
                     {!isCajaAbierta && (
-                      <div style={{ marginTop: '24px' }} className="alert alert-warning">
+                      <div style={{ marginTop: '16px' }} className="alert alert-warning">
                         Caja actualmente Cerrada. Abre un nuevo turno para registrar transacciones.
                       </div>
                     )}
                   </div>
 
-                  <div className="card">
+                  <div className="card contabilidad-report-card">
                     <h3 className="card-title">Reporte</h3>
-                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
                       Exporta el reporte consolidado de ingresos, egresos y el balance del turno actual.
                     </p>
                     <button 
                       type="button" 
-                      className="btn btn-secondary" 
+                      className="btn btn-secondary btn-export-pdf" 
                       onClick={handleExportPDF}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                     >
-                      Exportar PDF
+                      📄 Exportar PDF
                     </button>
                   </div>
                 </div>
 
                 {/* Right side: transaction log list */}
-                <div className="card">
+                <div className="card contabilidad-history-card">
                   <BrandWatermark size={150} opacity={0.03} style={{ right: '20px', bottom: '20px', transform: 'rotate(-10deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Historial de Transacciones del Turno</h3>
@@ -3720,55 +3700,82 @@ function App() {
                       }
                     />
                   ) : (
-                    <div className="table-container table-scrollable">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>Código</th>
-                            <th>Descripción</th>
-                            <th>Hora/Fecha</th>
-                            <th>Tipo</th>
-                            <th>Método de Pago</th>
-                            <th style={{ textAlign: 'right' }}>Monto</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {transacciones.map(t => (
-                            <tr key={t.id}>
-                              <td style={{ fontWeight: '700' }}>{t.id}</td>
-                              <td style={{ fontWeight: '500' }}>{t.descripcion}</td>
-                              <td style={{ color: 'var(--text-muted)' }}>{t.fecha}</td>
-                              <td>
-                                <span className={`badge ${t.tipo === 'Ingreso' ? 'badge-success' : 'badge-danger'}`}>
-                                  <span className="badge-dot" />
-                                  {t.tipo}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="payment-method-badge" style={{ 
-                                  backgroundColor: t.tipo === 'Ingreso' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
-                                  color: t.tipo === 'Ingreso' ? '#059669' : '#dc2626',
-                                  padding: '4px 8px', 
-                                  borderRadius: '6px',
-                                  fontSize: '11.5px',
-                                  fontWeight: '600',
-                                  border: t.tipo === 'Ingreso' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)'
-                                }}>
-                                  {t.metodoPago || 'Efectivo'}
-                                </span>
-                              </td>
-                              <td style={{ 
-                                textAlign: 'right', 
-                                fontWeight: '700',
-                                color: t.tipo === 'Ingreso' ? 'var(--accent-green)' : 'var(--accent-red)'
-                              }}>
-                                {t.tipo === 'Ingreso' ? '+' : '-'}{formatCOP(t.monto)}
-                              </td>
+                    <>
+                      {/* Desktop Table View */}
+                      <div className="transactions-desktop-view table-container table-scrollable">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Código</th>
+                              <th>Descripción</th>
+                              <th>Hora/Fecha</th>
+                              <th>Tipo</th>
+                              <th>Método de Pago</th>
+                              <th style={{ textAlign: 'right' }}>Monto</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {transacciones.map(t => (
+                              <tr key={t.id}>
+                                <td style={{ fontWeight: '700' }}>{t.id}</td>
+                                <td style={{ fontWeight: '500' }}>{t.descripcion}</td>
+                                <td style={{ color: 'var(--text-muted)' }}>{t.fecha}</td>
+                                <td>
+                                  <span className={`badge ${t.tipo === 'Ingreso' ? 'badge-success' : 'badge-danger'}`}>
+                                    <span className="badge-dot" />
+                                    {t.tipo}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="payment-method-badge" style={{ 
+                                    backgroundColor: t.tipo === 'Ingreso' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                                    color: t.tipo === 'Ingreso' ? '#059669' : '#dc2626',
+                                    padding: '4px 8px', 
+                                    borderRadius: '6px',
+                                    fontSize: '11.5px',
+                                    fontWeight: '600',
+                                    border: t.tipo === 'Ingreso' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)'
+                                  }}>
+                                    {t.metodoPago || 'Efectivo'}
+                                  </span>
+                                </td>
+                                <td style={{ 
+                                  textAlign: 'right', 
+                                  fontWeight: '700',
+                                  color: t.tipo === 'Ingreso' ? 'var(--accent-green)' : 'var(--accent-red)'
+                                }}>
+                                  {t.tipo === 'Ingreso' ? '+' : '-'}{formatCOP(t.monto)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Activity List View */}
+                      <div className="transactions-mobile-view">
+                        {transacciones.map(t => (
+                          <div className="mobile-transaction-item" key={t.id}>
+                            <div className={`mobile-trx-icon ${t.tipo === 'Ingreso' ? 'income' : 'expense'}`}>
+                              {t.tipo === 'Ingreso' ? '+$' : '-$'}
+                            </div>
+                            <div className="mobile-trx-details">
+                              <div className="mobile-trx-desc">{t.descripcion}</div>
+                              <div className="mobile-trx-meta">
+                                <span className="mobile-trx-code">{t.id}</span>
+                                <span>•</span>
+                                <span>{t.fecha}</span>
+                                <span>•</span>
+                                <span className="mobile-trx-payment">{t.metodoPago || 'Efectivo'}</span>
+                              </div>
+                            </div>
+                            <div className={`mobile-trx-amount ${t.tipo === 'Ingreso' ? 'income' : 'expense'}`}>
+                              {t.tipo === 'Ingreso' ? '+' : '-'}{formatCOP(t.monto)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
