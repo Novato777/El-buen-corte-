@@ -224,6 +224,26 @@ function App() {
     }
   }, [])
 
+  // 🔌 Ping automático al backend (Render) para evitar que se congele por inactividad
+  // Se ejecuta cada 10 minutos (600,000 ms) solo si la app está abierta en el navegador.
+  useEffect(() => {
+    const pingBackend = async () => {
+      try {
+        // Hacemos una petición ligera, no importa si da 401 o 404, el objetivo es generar tráfico
+        await fetch(`${API_BASE}/productos`, { 
+          method: 'GET', 
+          headers: { 'Cache-Control': 'no-cache' } 
+        })
+      } catch (err) {
+        // Silenciamos el error para no ensuciar la consola
+      }
+    }
+    
+    // Iniciar el ping repetitivo cada 10 minutos
+    const interval = setInterval(pingBackend, 10 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   const isPublicStore = 
     window.location.pathname.startsWith('/tienda') || 
     window.location.hash.startsWith('#/tienda') || 
