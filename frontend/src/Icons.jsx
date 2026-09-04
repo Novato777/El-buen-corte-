@@ -42,7 +42,9 @@ import {
   Star,
   SlidersHorizontal,
   ShoppingBag,
-  Bell
+  Bell,
+  Sun,
+  Moon
 } from 'lucide-react'
 
 // WhatsAppIcon keeps custom SVG as Lucide does not include it
@@ -340,4 +342,12 @@ export function EmptyState({
       )}
     </div>
   )
+}
+
+export function SunIcon({ className = "h-5 w-5" }) {
+  return <Sun className={className} strokeWidth={1.8} />
+}
+
+export function MoonIcon({ className = "h-5 w-5" }) {
+  return <Moon className={className} strokeWidth={1.8} />
 }

@@ -9,6 +9,7 @@ import {
   TrashIcon,
   CheckIcon,
   ClockIcon,
+  InfoIcon,
   TrendingUpIcon,
   SparklesIcon,
   ShieldCheckIcon,
@@ -41,6 +42,8 @@ import {
   SlidersIcon,
   ShoppingBagIcon,
   BellIcon,
+  SunIcon,
+  MoonIcon,
   BrandLogoSvg,
   BrandWatermark,
   EmptyState
@@ -256,6 +259,37 @@ function App() {
   const parseFormattedNumber = (val) => {
     if (!val) return '';
     return Number(String(val).replace(/\D/g, ''));
+  };
+
+  // 🌓 Modo Oscuro / Claro Global (excluyendo Tienda)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('app_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (isPublicStore) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('app_theme', theme);
+    }
+  }, [theme, isPublicStore]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // 📱 Sidebar Retráctil / Colapsable (Desktop)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('app_sidebar_collapsed') === 'true';
+  });
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('app_sidebar_collapsed', String(next));
+      return next;
+    });
   };
 
   const [activeTab, setActiveTab] = useState('resumen')
@@ -1403,6 +1437,12 @@ function App() {
     }
   }
 
+  // Confirmar cobro de pedido seleccionado desde modal
+  const handleConfirmChargeOrder = () => {
+    if (!posSelectedOrder) return
+    handleDeliverOrder(posSelectedOrder.id, newIncomePaymentMethod)
+  }
+
   // Cancel order handling
   const handleCancelOrder = async (orderId) => {
     try {
@@ -2331,6 +2371,8 @@ function App() {
         handleLogin={handleLogin}
         authLoading={authLoading} authError={authError} setAuthError={setAuthError}
         showPassword={showPassword} setShowPassword={setShowPassword}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     )
   }
@@ -2342,6 +2384,8 @@ function App() {
         handleLogout={handleLogout}
         API_BASE={API_BASE}
         getAuthHeaders={getAuthHeaders}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     )
   }
@@ -2444,17 +2488,56 @@ function App() {
       />
 
       {/* Sidebar Navigation */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="brand-section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="brand-icon">
-              <BrandLogoSvg style={{ width: '24px', height: '24px' }} />
-            </div>
-            <div className="brand-name">
-              El Buen Corte
-              <span>Dashboard</span>
-            </div>
-          </div>
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className="brand-section" style={{ position: 'relative' }}>
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              className="brand-icon collapsed-brand-toggle"
+              onClick={toggleSidebarCollapse}
+              title="Expandir Menú Lateral"
+              aria-label="Expandir Menú"
+              style={{
+                cursor: 'pointer',
+                margin: '0 auto',
+                border: 'none',
+                padding: 0,
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '12px'
+              }}
+            >
+              <BrandLogoSvg style={{ width: '22px', height: '22px' }} />
+            </button>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="brand-icon">
+                  <BrandLogoSvg style={{ width: '24px', height: '24px' }} />
+                </div>
+                <div className="brand-name">
+                  El Buen Corte
+                  <span>Dashboard</span>
+                </div>
+              </div>
+
+              {/* Botón Hamburguesa Retráctil para Desktop */}
+              <button 
+                type="button" 
+                className="sidebar-collapse-toggle desktop-collapse-btn"
+                onClick={toggleSidebarCollapse}
+                title="Colapsar Menú Lateral"
+                aria-label="Colapsar Menú Lateral"
+              >
+                <MenuIcon style={{ width: '18px', height: '18px' }} />
+              </button>
+            </>
+          )}
+
+          {/* Botón cerrar para Mobile */}
           <button 
             type="button" 
             className="mobile-sidebar-close-btn"
@@ -2465,37 +2548,24 @@ function App() {
           </button>
         </div>
 
+        {/* Menú de Módulos del Sistema Agrupados Arriba */}
         <nav className="nav-menu">
           <div
             className={`nav-item ${activeTab === 'resumen' ? 'active' : ''}`}
             onClick={() => { setActiveTab('resumen'); setMobileMenuOpen(false); }}
+            title="Resumen General"
           >
             <span className="nav-icon"><HomeIcon /></span>
-            Resumen General
+            <span>Resumen General</span>
           </div>
-
-          <a
-            href={`/tienda?tenant=${currentUser?.tenant_id || currentUser?.id || 1}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="nav-item"
-            style={{ textDecoration: 'none' }}
-            title="Abrir Tienda Virtual de su sede en pestaña nueva para clientes"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <span className="nav-icon"><ShoppingBagIcon /></span>
-            <span>Tienda Virtual</span>
-            <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#dc2626', background: '#fee2e2', padding: '2px 7px', borderRadius: '6px', fontWeight: '800' }}>
-              Abrir ↗
-            </span>
-          </a>
           
           <div
             className={`nav-item ${activeTab === 'pedidos' ? 'active' : ''}`}
             onClick={() => { setActiveTab('pedidos'); setMobileMenuOpen(false); }}
+            title="Gestión de Pedidos"
           >
             <span className="nav-icon"><ClipboardIcon /></span>
-            Gestión Pedidos
+            <span>Gestión Pedidos</span>
             {pedidosPendientesCount > 0 && (
               <span className="badge badge-danger" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '11px' }}>
                 {pedidosPendientesCount}
@@ -2506,9 +2576,10 @@ function App() {
           <div
             className={`nav-item ${activeTab === 'inventario' ? 'active' : ''}`}
             onClick={() => { setActiveTab('inventario'); setMobileMenuOpen(false); }}
+            title="Inventario & Mermas"
           >
             <span className="nav-icon"><BoxIcon /></span>
-            Inventario & Mermas
+            <span>Inventario & Mermas</span>
             {stockBajoAlerts.length > 0 && (
               <span className="badge badge-pending" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '11px' }}>
                 {stockBajoAlerts.length}
@@ -2519,29 +2590,67 @@ function App() {
           <div
             className={`nav-item ${activeTab === 'calculadora' ? 'active' : ''}`}
             onClick={() => { setActiveTab('calculadora'); setMobileMenuOpen(false); }}
+            title="Calculadora de Res"
           >
             <span className="nav-icon"><ScaleIcon /></span>
-            Calculadora Res
+            <span>Calculadora Res</span>
           </div>
 
           <div
             className={`nav-item ${activeTab === 'contabilidad' ? 'active' : ''}`}
             onClick={() => { setActiveTab('contabilidad'); setMobileMenuOpen(false); }}
+            title="Contabilidad / Caja"
           >
             <span className="nav-icon"><DollarIcon /></span>
-            Contabilidad / Caja
+            <span>Contabilidad / Caja</span>
           </div>
 
           <div
             className={`nav-item ${activeTab === 'perfil' ? 'active' : ''}`}
             onClick={() => { setActiveTab('perfil'); setMobileMenuOpen(false); }}
+            title="Perfil del Negocio"
           >
             <span className="nav-icon"><StoreIcon /></span>
-            Perfil del Negocio
+            <span>Perfil del Negocio</span>
           </div>
         </nav>
 
+        {/* Pie de Menú con Visitar Tienda Arriba de Cerrar Sesión */}
         <div className="sidebar-footer-container">
+          {/* Botón Visitar Tienda Reubicado */}
+          <a
+            href={`/tienda?tenant=${currentUser?.tenant_id || currentUser?.id || 1}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nav-item sidebar-tienda-link"
+            style={{
+              textDecoration: 'none',
+              marginBottom: '8px',
+              backgroundColor: theme === 'dark' ? 'rgba(37, 99, 235, 0.15)' : '#eff6ff',
+              border: `1px solid ${theme === 'dark' ? 'rgba(37, 99, 235, 0.35)' : '#bfdbfe'}`,
+              color: theme === 'dark' ? '#93c5fd' : '#1d4ed8'
+            }}
+            title="Visitar Tienda Virtual (Clientes)"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <span className="nav-icon"><ShoppingBagIcon style={{ color: '#2563eb' }} /></span>
+            <span style={{ fontWeight: '700' }}>Visitar Tienda</span>
+            {!sidebarCollapsed && (
+              <span style={{
+                marginLeft: 'auto',
+                fontSize: '10px',
+                color: '#2563eb',
+                background: theme === 'dark' ? 'rgba(37,99,235,0.25)' : '#dbeafe',
+                padding: '2px 6px',
+                borderRadius: '6px',
+                fontWeight: '800'
+              }}>
+                Abrir ↗
+              </span>
+            )}
+          </a>
+
+          {/* Botón Cerrar Sesión */}
           <button 
             type="button" 
             className="sidebar-logout-btn" 
@@ -2552,9 +2661,11 @@ function App() {
             <span>Cerrar Sesión</span>
           </button>
 
-          <div className="sidebar-footer">
-            Desarrollado por <span className="nexo-brand">Ne<span className="nexo-x">X</span>o</span> <span className="nexo-by">by: Brayan Cardozo</span>
-          </div>
+          {!sidebarCollapsed && (
+            <div className="sidebar-footer">
+              Desarrollado por <span className="nexo-brand">Ne<span className="nexo-x">X</span>o</span> <span className="nexo-by">by: Brayan Cardozo</span>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -2565,8 +2676,15 @@ function App() {
             <button 
               type="button" 
               className="mobile-hamburger-btn" 
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Abrir Menú"
+              onClick={() => {
+                if (window.innerWidth <= 768) {
+                  setMobileMenuOpen(true);
+                } else {
+                  toggleSidebarCollapse();
+                }
+              }}
+              title="Alternar Menú Lateral"
+              aria-label="Alternar Menú"
             >
               <MenuIcon style={{ width: '22px', height: '22px' }} />
             </button>
@@ -2582,6 +2700,26 @@ function App() {
           </div>
 
           <div className="navbar-actions">
+            {/* 🌓 Botón Modo Oscuro / Claro en Sistema Principal */}
+            <button
+              type="button"
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+              aria-label="Cambiar Tema"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <SunIcon style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
+                  <span className="theme-toggle-text">Claro</span>
+                </>
+              ) : (
+                <>
+                  <MoonIcon style={{ width: '16px', height: '16px', color: '#6366f1' }} />
+                  <span className="theme-toggle-text">Oscuro</span>
+                </>
+              )}
+            </button>
             <div className="date-badge">
               📅 {new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}
             </div>
@@ -2775,7 +2913,7 @@ function App() {
               <div className="grid-dashboard-main">
                 {/* Column Left: Actions and lists */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  <div className="card card-tint-blue" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #eff6ff 100%)' }}>
+                  <div className="card card-tint-blue">
                     <BrandWatermark size={160} style={{ right: '5px', bottom: '5px', transform: 'rotate(-5deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-red)' }}><BoltIcon /></div>
                     <h3 className="card-title" style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '18px' }}>
@@ -2820,7 +2958,7 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="card card-tint-gold" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #fffbeb 100%)' }}>
+                  <div className="card card-tint-gold">
                     <BrandWatermark size={160} style={{ right: '5px', bottom: '5px', transform: 'rotate(-5deg)' }} />
                     <div className="card-watermark-icon" style={{ color: 'var(--accent-gold)' }}><ClockIcon /></div>
                     <div className="card-title">
@@ -2871,7 +3009,7 @@ function App() {
                 </div>
 
                 {/* Column Right: Transacciones */}
-                <div className="card card-tint-green" style={{ background: 'linear-gradient(160deg, #ffffff 40%, #f0fdf4 100%)' }}>
+                <div className="card card-tint-green">
                   <BrandWatermark size={180} style={{ right: '10px', bottom: '10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-green)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Transacciones del Turno</h3>
@@ -2918,7 +3056,7 @@ function App() {
           {/* 🛒 TAB: GESTIÓN DE PEDIDOS */}
           {/* ================================================================= */}
           {activeTab === 'pedidos' && (
-            <div className="card card-tint-gold" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #fffbeb 100%)' }}>
+            <div className="card card-tint-gold" style={{ padding: "24px", position: "relative", overflow: "hidden" }}>
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', zIndex: 1 }}>
@@ -3160,7 +3298,7 @@ function App() {
           {/* 📦 TAB: INVENTARIO & MERMAS */}
           {/* ================================================================= */}
           {activeTab === 'inventario' && (
-            <div className="card card-tint-red" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #fff1f2 100%)' }}>
+            <div className="card card-tint-red" style={{ padding: "24px", position: "relative", overflow: "hidden" }}>
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', position: 'relative', zIndex: 1 }}>
@@ -3699,7 +3837,7 @@ function App() {
                 </div>
 
                 {/* Right side: transaction log list */}
-                <div className="card contabilidad-history-card card-tint-green" style={{ background: 'linear-gradient(160deg, #ffffff 20%, #f0fdf4 100%)' }}>
+                <div className="card contabilidad-history-card card-tint-green">
                   <BrandWatermark size={250} style={{ right: '10px', bottom: '10px', transform: 'rotate(-5deg)' }} />
                   <div className="card-watermark-icon" style={{ color: 'var(--accent-blue)' }}><TrendingUpIcon /></div>
                   <h3 className="card-title">Historial de Transacciones del Turno</h3>
@@ -3809,7 +3947,7 @@ function App() {
           {/* 🏢 TAB: PERFIL DEL NEGOCIO */}
           {/* ================================================================= */}
           {activeTab === 'perfil' && (
-            <div className="card card-tint-blue" style={{ padding: '24px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 20%, #eff6ff 100%)' }}>
+            <div className="card card-tint-blue" style={{ padding: "24px", position: "relative", overflow: "hidden" }}>
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               {hasUnsavedChanges && (
@@ -3833,7 +3971,7 @@ function App() {
 
               <div className="profile-layout" style={{ position: 'relative', zIndex: 1 }}>
                 {/* Left menu column */}
-                <div className="card" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }}>
+                <div className="card profile-sidebar-card" style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
                   <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '12px 16px 8px' }}>
                     Secciones del Perfil
                   </h4>
@@ -6267,7 +6405,7 @@ function App() {
                 <div className="modal-body" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
                   
                   {/* SECCIÓN 1: RESUMEN DE CORTES (AZUL/SLATE) */}
-                  <div style={{ background: '#f0f7ff', borderRadius: '14px', padding: '14px 16px', border: '1.5px solid #bfdbfe' }}>
+                  <div className="pos-charge-section pos-charge-cuts-card" style={{ borderRadius: '14px', padding: '14px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                       <span style={{ background: '#2563eb', color: '#ffffff', fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
                         1. Cortes del Pedido
@@ -6279,23 +6417,23 @@ function App() {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
                       {posSelectedOrder.items?.map((item, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #dbeafe', fontSize: '13px' }}>
+                        <div key={idx} className="pos-charge-item-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: '8px', fontSize: '13px' }}>
                           <span style={{ fontWeight: '600' }}>{item.cantidad} {item.unidad || 'kg'} × {item.nombre}</span>
-                          <strong style={{ color: '#0f172a' }}>{formatCOP((item.precio || item.precioVenta || 0) * item.cantidad)}</strong>
+                          <strong className="pos-charge-item-price">{formatCOP((item.precio || item.precioVenta || 0) * item.cantidad)}</strong>
                         </div>
                       ))}
                     </div>
                   </div>
 
                   {/* SECCIÓN 2: DATOS DEL CLIENTE */}
-                  <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '10px 14px', border: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                  <div className="pos-charge-section pos-charge-customer-card" style={{ borderRadius: '12px', padding: '10px 14px', fontSize: '12.5px' }}>
                     <div>👤 <strong>Cliente:</strong> {posSelectedOrder.cliente}</div>
                     {posSelectedOrder.direccion && <div>📍 <strong>Dirección:</strong> {posSelectedOrder.direccion}</div>}
                     {posSelectedOrder.notas && <div style={{ color: '#b45309' }}>📝 <strong>Notas:</strong> {posSelectedOrder.notas}</div>}
                   </div>
 
                   {/* SECCIÓN 3: PAGO Y CAMBIO */}
-                  <div style={{ background: '#ecfdf5', borderRadius: '14px', padding: '14px 16px', border: '1.5px solid #a7f3d0' }}>
+                  <div className="pos-charge-section pos-charge-payment-card" style={{ borderRadius: '14px', padding: '14px 16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <span style={{ background: '#059669', color: '#ffffff', fontSize: '10.5px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', textTransform: 'uppercase' }}>
                         2. Liquidación y Cobro
@@ -6435,7 +6573,7 @@ function App() {
               /* CASO B: REGISTRO NORMAL DESDE CONTABILIDAD / CAJA */
               <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
                 {/* Mode Switcher Tabs */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '6px 16px', gap: '8px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+                <div className="pos-modal-tabs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '6px 16px', gap: '8px', flexShrink: 0 }}>
                   <button
                     type="button"
                     onClick={() => setIncomeMode('pos')}
@@ -6488,7 +6626,7 @@ function App() {
                   <div className="modal-body" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
                     
                     {/* 🟦 SECCIÓN 1: SELECCIÓN Y CONFIGURACIÓN DEL CORTE */}
-                    <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px 14px', border: '1.5px solid #cbd5e1', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div className="pos-box-card pos-box-step1" style={{ borderRadius: '12px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       
                       {/* Section Header */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -6696,7 +6834,7 @@ function App() {
                     </div>
 
                     {/* 🟧 SECCIÓN 2: TICKET DE VENTA (PRODUCTOS AGREGADOS) */}
-                    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '12px 14px', border: '1.5px solid #fed7aa', boxShadow: '0 2px 8px rgba(251, 146, 60, 0.05)' }}>
+                    <div className="pos-box-card pos-box-step2" style={{ borderRadius: '12px', padding: '12px 14px', boxShadow: '0 2px 8px rgba(251, 146, 60, 0.05)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ background: '#ea580c', color: '#ffffff', fontSize: '10px', fontWeight: '900', padding: '2px 7px', borderRadius: '5px', textTransform: 'uppercase' }}>
@@ -6718,7 +6856,7 @@ function App() {
                       </div>
 
                       {posCart.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '16px 12px', background: '#fffaf5', borderRadius: '8px', border: '1px dashed #fdba74', color: '#9a3412' }}>
+                        <div className="pos-empty-ticket" style={{ textAlign: 'center', padding: '16px 12px', borderRadius: '8px' }}>
                           <span style={{ fontSize: '20px', display: 'block', marginBottom: '2px' }}>🛒</span>
                           <p style={{ margin: 0, fontSize: '12px', fontWeight: '600' }}>
                             El ticket está vacío.
@@ -6732,14 +6870,13 @@ function App() {
                           {posCart.map((item, idx) => (
                             <div
                               key={idx}
+                              className="pos-ticket-row"
                               style={{
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
-                                background: '#fffaf5',
                                 padding: '6px 10px',
-                                borderRadius: '8px',
-                                border: '1px solid #ffedd5'
+                                borderRadius: '8px'
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -6800,7 +6937,7 @@ function App() {
                     </div>
 
                     {/* 🟩 SECCIÓN 3: FORMA DE PAGO Y VUELTAS */}
-                    <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '12px 14px', border: '1.5px solid #86efac' }}>
+                    <div className="pos-box-card pos-box-step3" style={{ borderRadius: '12px', padding: '12px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                         <span style={{ background: '#16a34a', color: '#ffffff', fontSize: '10px', fontWeight: '900', padding: '2px 7px', borderRadius: '5px', textTransform: 'uppercase' }}>
                           Paso 3
@@ -8051,12 +8188,12 @@ function App() {
             <div className="modal-body" style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
               
               {/* Info del Cliente */}
-              <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '14px 18px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px', letterSpacing: '0.4px' }}>
+              <div className="order-detail-card" style={{ borderRadius: '14px', padding: '14px 18px' }}>
+                <div className="order-detail-subheading" style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.4px' }}>
                   👤 Datos del Cliente & Entrega
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
-                  <div style={{ fontSize: '14.5px', fontWeight: '700', color: '#0f172a' }}>
+                  <div className="order-detail-client-name" style={{ fontSize: '14.5px', fontWeight: '700' }}>
                     {selectedOrderDetail.cliente}
                   </div>
                   {selectedOrderDetail.telefono && (
@@ -8104,10 +8241,10 @@ function App() {
               {/* Lista de Cortes a Preparar */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  <span className="order-detail-heading" style={{ fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                     🥩 Cortes a Preparar y Despachar ({selectedOrderDetail.items?.length || 0})
                   </span>
-                  <span style={{ fontSize: '11.5px', color: '#64748b' }}>
+                  <span className="order-detail-subtext" style={{ fontSize: '11.5px' }}>
                     Pesar y empaquetar según solicitud
                   </span>
                 </div>
@@ -8116,14 +8253,13 @@ function App() {
                   {selectedOrderDetail.items?.map((item, idx) => (
                     <div 
                       key={idx} 
+                      className="order-detail-item"
                       style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between', 
                         alignItems: 'center', 
-                        background: '#ffffff', 
                         padding: '12px 16px', 
-                        borderRadius: '12px', 
-                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
                         boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
                       }}
                     >
@@ -8140,7 +8276,7 @@ function App() {
                           {item.cantidad} kg
                         </span>
                         <div>
-                          <div style={{ fontWeight: '800', fontSize: '14.5px', color: '#0f172a' }}>
+                          <div className="order-detail-item-title" style={{ fontWeight: '800', fontSize: '14.5px' }}>
                             {item.nombre}
                           </div>
                           <div style={{ fontSize: '11.5px', color: '#64748b' }}>
@@ -8160,16 +8296,15 @@ function App() {
               </div>
 
               {/* Total General */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
-                padding: '14px 18px', 
-                borderRadius: '14px', 
-                border: '1px solid #e2e8f0', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center' 
-              }}>
-                <span style={{ fontSize: '13px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>
+              <div className="order-detail-total-card"
+                style={{ 
+                  padding: '14px 18px', 
+                  borderRadius: '14px', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center' 
+                }}>
+                <span className="order-detail-total-label" style={{ fontSize: '13px', fontWeight: '800', textTransform: 'uppercase' }}>
                   Total a Cobrar:
                 </span>
                 <strong style={{ fontSize: '22px', fontWeight: '900', color: '#dc2626' }}>
@@ -8228,7 +8363,8 @@ function LoginView({
   loginPassword, setLoginPassword,
   handleLogin,
   authLoading, authError, setAuthError,
-  showPassword, setShowPassword
+  showPassword, setShowPassword,
+  theme, toggleTheme
 }) {
   const [loginMode, setLoginMode] = useState('regular') // 'regular' | 'superadmin'
   const [showLogin, setShowLogin] = useState(false)
@@ -8258,6 +8394,25 @@ function LoginView({
 
   return (
     <div className="auth-wrapper">
+      {/* 🌓 Botón Flotante Modo Oscuro / Claro en Login */}
+      <button
+        type="button"
+        className="theme-toggle-btn theme-toggle-floating"
+        onClick={toggleTheme}
+        title={theme === 'dark' ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+      >
+        {theme === 'dark' ? (
+          <>
+            <SunIcon style={{ width: 16, height: 16, color: '#f59e0b' }} />
+            <span>Modo Claro</span>
+          </>
+        ) : (
+          <>
+            <MoonIcon style={{ width: 16, height: 16, color: '#6366f1' }} />
+            <span>Modo Oscuro</span>
+          </>
+        )}
+      </button>
       <div className="auth-card">
         {/* Lado Izquierdo: Branding & Beneficios */}
         <div className="auth-banner" style={{
@@ -8484,7 +8639,9 @@ function SuperAdminPortal({
   currentUser,
   handleLogout,
   API_BASE,
-  getAuthHeaders
+  getAuthHeaders,
+  theme,
+  toggleTheme
 }) {
   const [usersList, setUsersList] = useState([])
   const [usersLoading, setUsersLoading] = useState(false)
@@ -8519,6 +8676,17 @@ function SuperAdminPortal({
 
   // Modal: Restablecer / Recuperar Contraseña
   const [resetModalOpen, setResetModalOpen] = useState(false)
+  const [infoModalOpen, setInfoModalOpen] = useState(false)
+  const [infoUser, setInfoUser] = useState(null)
+  const openInfoSuscripcion = (u) => {
+    setInfoUser(u)
+    setInfoModalOpen(true)
+  }
+  const [renovarModalOpen, setRenovarModalOpen] = useState(false)
+  const [renovarUser, setRenovarUser] = useState(null)
+  const [renovarMeses, setRenovarMeses] = useState('1')
+  const [renovarLoading, setRenovarLoading] = useState(false)
+  const [renovarError, setRenovarError] = useState('')
   const [resetUserId, setResetUserId] = useState(null)
   const [resetUserName, setResetUserName] = useState('')
   const [resetUserEmail, setResetUserEmail] = useState('')
@@ -8608,6 +8776,59 @@ function SuperAdminPortal({
   }
 
   // Bloquear o Activar usuario
+  
+  const handleRenovarSuscripcion = (u) => {
+    setRenovarUser(u)
+    setRenovarMeses('1')
+    setRenovarError('')
+    setRenovarModalOpen(true)
+  }
+
+  const submitRenovarSuscripcion = async (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (!renovarUser || isNaN(renovarMeses) || parseInt(renovarMeses, 10) <= 0) return
+    
+    setRenovarLoading(true)
+    setRenovarError('')
+
+    try {
+      const months = parseInt(renovarMeses, 10)
+      const hasPrevVenc = !!renovarUser.fecha_vencimiento
+      const regDate = renovarUser.created_at ? new Date(renovarUser.created_at) : new Date()
+      // La renovación cuenta desde la fecha de registro si nunca ha tenido vencimiento
+      const baseDate = hasPrevVenc ? new Date(renovarUser.fecha_vencimiento) : regDate
+
+      let targetDate = new Date(baseDate)
+      targetDate.setMonth(targetDate.getMonth() + months)
+
+      if (targetDate < new Date()) {
+        targetDate = new Date()
+        targetDate.setMonth(targetDate.getMonth() + months)
+      }
+
+      const res = await fetch(`${API_BASE}/users/${renovarUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          nombre: renovarUser.nombre,
+          fecha_vencimiento: targetDate.toISOString(),
+          activo: true
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo renovar la suscripción')
+
+      notifySuccess(`¡Suscripción de "${renovarUser.nombre}" renovada con éxito hasta el ${targetDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}!`)
+      setRenovarModalOpen(false)
+      fetchUsers()
+    } catch (err) {
+      setRenovarError(err.message || 'Error al renovar la suscripción')
+    } finally {
+      setRenovarLoading(false)
+    }
+  }
+
   const handleToggleStatus = async (user) => {
     const actionText = user.activo ? 'bloquear y suspender el acceso de' : 'reactivar el acceso de'
     if (!window.confirm(`¿Estás seguro de que deseas ${actionText} a "${user.nombre}"?`)) return
@@ -8770,16 +8991,35 @@ function SuperAdminPortal({
         </div>
 
         <div className="superadmin-standalone-actions">
+          {/* 🌓 Botón Modo Oscuro / Claro en SuperAdmin */}
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
+          >
+            {theme === 'dark' ? (
+              <>
+                <SunIcon style={{ width: 15, height: 15, color: '#f59e0b' }} />
+                <span>Claro</span>
+              </>
+            ) : (
+              <>
+                <MoonIcon style={{ width: 15, height: 15, color: '#6366f1' }} />
+                <span>Oscuro</span>
+              </>
+            )}
+          </button>
           {/* Perfil del SuperAdmin */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '6px 14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+          <div className="superadmin-header-profile" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 14px', borderRadius: '12px' }}>
             <div className="user-avatar-circle avatar-superadmin" style={{ width: 32, height: 32, fontSize: 12 }}>
               👑
             </div>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', lineHeight: 1.1 }}>
+              <div className="profile-name" style={{ fontSize: '13px', fontWeight: '800', lineHeight: 1.1 }}>
                 {currentUser?.nombre || 'Super Administrador'}
               </div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>
+              <div className="profile-email" style={{ fontSize: '11px' }}>
                 {currentUser?.email}
               </div>
             </div>
@@ -8930,9 +9170,16 @@ function SuperAdminPortal({
                 <div className="superadmin-search-box">
                   <span className="search-icon"><SearchIcon /></span>
                   <input
-                    type="text"
+                    type="search"
+                    name="admin_user_search_filter"
+                    id="admin_user_search_filter"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    data-lpignore="true"
+                    data-form-type="other"
                     className="superadmin-search-input"
-                    placeholder="Buscar por nombre o correo electrónico..."
+                    placeholder="Buscar por nombre o usuario..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
                   />
@@ -8986,6 +9233,7 @@ function SuperAdminPortal({
                         <th>Sede / Tenant</th>
                         <th>Estado</th>
                         <th>Registro</th>
+                        <th style={{ textAlign: 'center' }}>Vencimiento</th>
                         <th style={{ textAlign: 'right' }}>Acciones Maestras</th>
                       </tr>
                     </thead>
@@ -9050,14 +9298,11 @@ function SuperAdminPortal({
                             </td>
 
                             <td>
-                              <span style={{ 
+                              <span className="superadmin-tenant-pill" style={{ 
                                 fontSize: '11px', 
                                 fontWeight: '700', 
-                                color: u.rol === 'superadmin' ? '#7c3aed' : (u.tenant_id ? '#2563eb' : '#64748b'), 
-                                background: u.rol === 'superadmin' ? '#f5f3ff' : (u.tenant_id ? '#eff6ff' : '#f1f5f9'), 
                                 padding: '3px 9px', 
                                 borderRadius: '6px',
-                                border: `1px solid ${u.rol === 'superadmin' ? '#ddd6fe' : (u.tenant_id ? '#bfdbfe' : '#e2e8f0')}`,
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px'
@@ -9082,6 +9327,64 @@ function SuperAdminPortal({
                               {u.created_at ? new Date(u.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Reciente'}
                             </td>
 
+                            {/* Celda Vencimiento con botones de Renovar e Información */}
+                            <td style={{ textAlign: 'center', minWidth: '180px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                                <div style={{ textAlign: 'left', minWidth: '85px' }}>
+                                  {u.fecha_vencimiento ? (
+                                    <div>
+                                      <div style={{
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        color: new Date(u.fecha_vencimiento) < new Date() ? '#ef4444' : '#059669',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '3px'
+                                      }}>
+                                        {new Date(u.fecha_vencimiento) < new Date() ? '⚠️' : '✅'}
+                                        {new Date(u.fecha_vencimiento).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>
+                                        {(() => {
+                                          const diff = Math.ceil((new Date(u.fecha_vencimiento).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                                          return diff > 0 ? `${diff}d restantes` : (diff === 0 ? 'Vence hoy' : `Expiró hace ${Math.abs(diff)}d`);
+                                        })()}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: '11px', color: '#94a3b8', background: '#f1f5f9', padding: '2px 7px', borderRadius: '6px', fontWeight: '600' }}>
+                                      Sin asignar
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  {/* Botón Renovar Suscripción */}
+                                  <button
+                                    type="button"
+                                    className="superadmin-action-btn"
+                                    title="Renovar Suscripción"
+                                    onClick={() => handleRenovarSuscripcion(u)}
+                                    style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}
+                                  >
+                                    <ClockIcon style={{ width: 16, height: 16, color: '#2563eb' }} />
+                                  </button>
+
+                                  {/* Botón Información de Suscripción */}
+                                  <button
+                                    type="button"
+                                    className="superadmin-action-btn"
+                                    title="Información y Días Restantes"
+                                    onClick={() => openInfoSuscripcion(u)}
+                                    style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}
+                                  >
+                                    <InfoIcon style={{ width: 16, height: 16, color: '#16a34a' }} />
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Celda Acciones Maestras */}
                             <td style={{ textAlign: 'right' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                 {/* Botón Recuperar / Restablecer Contraseña */}
@@ -9206,20 +9509,17 @@ function SuperAdminPortal({
                     <label className="form-label" style={{ margin: 0 }}>Contraseña Inicial</label>
                     <button
                       type="button"
+                      className="superadmin-btn-generate"
                       style={{ 
                         padding: '6px 12px', 
                         fontSize: '11px', 
                         fontWeight: '700',
                         borderRadius: '8px',
-                        background: '#fef3c7',
-                        color: '#d97706',
-                        border: '1px solid #fde68a',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 2px 4px rgba(245, 158, 11, 0.1)'
+                        transition: 'all 0.2s'
                       }}
                       onMouseOver={(e) => { e.currentTarget.style.background = '#fde68a'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                       onMouseOut={(e) => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -9288,6 +9588,438 @@ function SuperAdminPortal({
       )}
 
       {/* ================================================================= */}
+      {/* MODAL: RENOVAR SUSCRIPCIÓN SAAS (DISEÑO PREMIUM) */}
+      {/* ================================================================= */}
+      {renovarModalOpen && renovarUser && (
+        <div className="superadmin-modal-backdrop" onClick={() => setRenovarModalOpen(false)}>
+          <div className="superadmin-modal-box" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="superadmin-modal-header">
+              <div className="superadmin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  color: '#2563eb'
+                }}>
+                  <ClockIcon style={{ width: 22, height: 22 }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>Renovar Suscripción SaaS</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>Control de tiempo de uso y vigencia de cuenta</div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="superadmin-modal-close" 
+                onClick={() => setRenovarModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={submitRenovarSuscripcion}>
+              <div className="superadmin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {/* User Summary Card */}
+                <div className="superadmin-user-summary-card" style={{
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <div className="user-avatar-circle avatar-admin" style={{ width: 44, height: 44, fontSize: 16 }}>
+                    {renovarUser.nombre ? renovarUser.nombre.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="user-title" style={{ fontSize: '15px', fontWeight: '700' }}>{renovarUser.nombre}</div>
+                    <div className="user-subtitle" style={{ fontSize: '12.5px' }}>{renovarUser.email || 'Sin correo asignado'}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className="status-pill status-pill-active" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                      {renovarUser.rol?.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {renovarError && (
+                  <div className="auth-alert-error" style={{ padding: '12px 16px', fontSize: '13px' }}>
+                    ⚠️ {renovarError}
+                  </div>
+                )}
+
+                {/* Subscription Period Selector */}
+                <div>
+                  <label className="form-label" style={{ fontWeight: '700', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Período a Contratar / Renovar</span>
+                    <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600' }}>
+                      {renovarMeses} {parseInt(renovarMeses, 10) === 1 ? 'mes seleccionado' : 'meses seleccionados'}
+                    </span>
+                  </label>
+
+                  {/* Preset Buttons Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '12px' }}>
+                    {[
+                      { label: '1 Mes', val: '1', badge: 'Básico' },
+                      { label: '3 Meses', val: '3', badge: 'Popular' },
+                      { label: '6 Meses', val: '6', badge: 'Semestral' },
+                      { label: '12 Meses', val: '12', badge: '1 Año' }
+                    ].map(plan => {
+                      const isSel = String(renovarMeses) === plan.val;
+                      return (
+                        <button
+                          key={plan.val}
+                          type="button"
+                          onClick={() => setRenovarMeses(plan.val)}
+                          className={`renovar-preset-btn ${isSel ? 'active' : ''}`}
+                          style={{
+                            padding: '10px 6px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.15s ease',
+                            fontWeight: isSel ? '700' : '600'
+                          }}
+                        >
+                          <span style={{ fontSize: '13px' }}>{plan.label}</span>
+                          <span className={`renovar-preset-badge ${isSel ? 'active' : ''}`} style={{
+                            fontSize: '9.5px',
+                            padding: '1px 5px',
+                            borderRadius: '4px'
+                          }}>
+                            {plan.badge}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Number Input */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>O ingresa meses personalizados:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      className="input-control"
+                      value={renovarMeses}
+                      onChange={(e) => setRenovarMeses(e.target.value)}
+                      style={{ width: '90px', padding: '6px 10px', fontSize: '13px', textAlign: 'center' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Calculation Details Card */}
+                {(() => {
+                  const m = parseInt(renovarMeses, 10) || 1;
+                  const hasPrevVenc = !!renovarUser.fecha_vencimiento;
+                  const regDate = renovarUser.created_at ? new Date(renovarUser.created_at) : new Date();
+                  const baseDate = hasPrevVenc ? new Date(renovarUser.fecha_vencimiento) : regDate;
+                  
+                  let calcDate = new Date(baseDate);
+                  calcDate.setMonth(calcDate.getMonth() + m);
+
+                  if (calcDate < new Date()) {
+                    calcDate = new Date();
+                    calcDate.setMonth(calcDate.getMonth() + m);
+                  }
+
+                  return (
+                    <div className="superadmin-calc-details-card" style={{
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#166534' }}>
+                        <span>📅 Fecha de Registro en Sistema:</span>
+                        <strong style={{ color: '#14532d' }}>
+                          {regDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' })}
+                        </strong>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#166534' }}>
+                        <span>⏳ Base de conteo aplicada:</span>
+                        <strong>
+                          {hasPrevVenc 
+                            ? `Desde vencimiento anterior (${new Date(renovarUser.fecha_vencimiento).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })})`
+                            : `Desde fecha de registro (${regDate.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })})`
+                          }
+                        </strong>
+                      </div>
+
+                      <div style={{
+                        marginTop: '4px',
+                        paddingTop: '8px',
+                        borderTop: '1px dashed #86efac',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#14532d' }}>
+                          🚀 Nueva Fecha de Vencimiento:
+                        </span>
+                        <span className="superadmin-calc-date-pill" style={{
+                          fontSize: '14px',
+                          fontWeight: '800',
+                          padding: '4px 10px',
+                          borderRadius: '8px'
+                        }}>
+                          {calcDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: '11px', color: '#15803d', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <span>✅ La cuenta se mantendrá Activa con acceso al sistema hasta esta fecha.</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="superadmin-modal-footer" style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setRenovarModalOpen(false)}
+                  disabled={renovarLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={renovarLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563eb', borderColor: '#2563eb' }}
+                >
+                  <ClockIcon style={{ width: 16, height: 16 }} />
+                  {renovarLoading ? 'Guardando suscripción...' : 'Confirmar y Activar Suscripción'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL: INFORMACIÓN Y ESTADO DE SUSCRIPCIÓN (DISEÑO PREMIUM) */}
+      {/* ================================================================= */}
+      {infoModalOpen && infoUser && (
+        <div className="superadmin-modal-backdrop" onClick={() => setInfoModalOpen(false)}>
+          <div className="superadmin-modal-box" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="superadmin-modal-header">
+              <div className="superadmin-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  color: '#16a34a'
+                }}>
+                  <InfoIcon style={{ width: 22, height: 22 }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>Información de Suscripción</div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>Detalles de vigencia, registro y próximo pago</div>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                className="superadmin-modal-close" 
+                onClick={() => setInfoModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="superadmin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {/* User Banner */}
+              <div className="superadmin-user-summary-card" style={{
+                borderRadius: '12px',
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div className="user-avatar-circle avatar-admin" style={{ width: 44, height: 44, fontSize: 16 }}>
+                  {infoUser.nombre ? infoUser.nombre.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div className="user-title" style={{ fontSize: '15px', fontWeight: '700' }}>{infoUser.nombre}</div>
+                  <div className="user-subtitle" style={{ fontSize: '12.5px' }}>{infoUser.email || 'Sin correo'}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span className={`status-pill ${infoUser.activo !== false ? 'status-pill-active' : 'status-pill-blocked'}`} style={{ fontSize: '11px' }}>
+                    {infoUser.activo !== false ? '🟢 Activo' : '🔴 Bloqueado'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 3 Metrics Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* 1. Fecha de Registro */}
+                <div className="superadmin-info-metric-card" style={{
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="superadmin-info-icon-box" style={{ padding: '7px', borderRadius: '8px' }}>
+                      📅
+                    </div>
+                    <div>
+                      <div className="metric-title" style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase' }}>Fecha de Registro</div>
+                      <div className="metric-val" style={{ fontSize: '13.5px', fontWeight: '700' }}>
+                        {infoUser.created_at
+                          ? new Date(infoUser.created_at).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+                          : 'Reciente / No registrada'}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Ingreso inicial</span>
+                </div>
+
+                {/* 2. Próximo Pago / Vencimiento */}
+                <div className="superadmin-info-metric-card" style={{
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="superadmin-info-icon-box blue" style={{ padding: '7px', borderRadius: '8px' }}>
+                      💳
+                    </div>
+                    <div>
+                      <div className="metric-title" style={{ fontSize: '11px', fontWeight: '600', textTransform: 'uppercase' }}>Próximo Pago / Vencimiento</div>
+                      <div style={{
+                        fontSize: '13.5px',
+                        fontWeight: '700',
+                        color: infoUser.fecha_vencimiento
+                          ? (new Date(infoUser.fecha_vencimiento) < new Date() ? '#ef4444' : '#10b981')
+                          : '#64748b'
+                      }}>
+                        {infoUser.fecha_vencimiento
+                          ? new Date(infoUser.fecha_vencimiento).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+                          : 'Sin fecha asignada'}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: infoUser.fecha_vencimiento && new Date(infoUser.fecha_vencimiento) < new Date() ? '#ef4444' : '#10b981'
+                  }}>
+                    {infoUser.fecha_vencimiento ? (new Date(infoUser.fecha_vencimiento) < new Date() ? 'Expirada' : 'Vigente') : 'Ilimitada'}
+                  </span>
+                </div>
+
+                {/* 3. Días Restantes */}
+                {(() => {
+                  if (!infoUser.fecha_vencimiento) {
+                    return (
+                      <div style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '12px 16px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ background: '#e2e8f0', padding: '7px', borderRadius: '8px', color: '#475569' }}>
+                            ⏳
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Tiempo Restante</div>
+                            <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#475569' }}>Acceso continuo sin vencimiento</div>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '11px', background: '#e2e8f0', padding: '2px 8px', borderRadius: '6px', color: '#475569', fontWeight: '600' }}>Sin Límite</span>
+                      </div>
+                    );
+                  }
+
+                  const diffDays = Math.ceil((new Date(infoUser.fecha_vencimiento).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                  const isExpired = diffDays <= 0;
+
+                  return (
+                    <div style={{
+                      background: isExpired ? '#fef2f2' : '#f0fdf4',
+                      border: `1px solid ${isExpired ? '#fecaca' : '#bbf7d0'}`,
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ background: isExpired ? '#fee2e2' : '#dcfce7', padding: '7px', borderRadius: '8px', color: isExpired ? '#dc2626' : '#16a34a' }}>
+                          ⏳
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: isExpired ? '#991b1b' : '#166534', fontWeight: '600', textTransform: 'uppercase' }}>
+                            {isExpired ? 'Estado del Plan' : 'Días de Servicio Restantes'}
+                          </div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: isExpired ? '#b91c1c' : '#15803d' }}>
+                            {isExpired
+                              ? `Suscripción Expirada (hace ${Math.abs(diffDays)} días)`
+                              : (diffDays === 1 ? '¡Último día de suscripción!' : `${diffDays} Días Disponibles`)}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: '11.5px',
+                        fontWeight: '700',
+                        padding: '3px 9px',
+                        borderRadius: '8px',
+                        background: isExpired ? '#fee2e2' : '#dcfce7',
+                        color: isExpired ? '#dc2626' : '#16a34a'
+                      }}>
+                        {isExpired ? '⚠️ Suspendido' : '🟢 Al Día'}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="superadmin-modal-footer" style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setInfoModalOpen(false)}
+              >
+                Cerrar
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-primary"
+                onClick={() => {
+                  setInfoModalOpen(false);
+                  handleRenovarSuscripcion(infoUser);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', borderColor: '#2563eb' }}
+              >
+                <ClockIcon style={{ width: 16, height: 16 }} />
+                Renovar Suscripción Ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
       {/* MODAL: RECUPERAR / RESTABLECER CONTRASEÑA */}
       {/* ================================================================= */}
       {resetModalOpen && (
@@ -9309,9 +10041,9 @@ function SuperAdminPortal({
 
             <form onSubmit={handleResetPasswordSubmit}>
               <div className="superadmin-modal-body">
-                <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', marginBottom: '18px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>{resetUserName}</div>
-                  <div style={{ fontSize: '12.5px', color: '#64748b' }}>{resetUserEmail}</div>
+                <div className="superadmin-user-summary-card" style={{ padding: '14px 16px', borderRadius: '12px', marginBottom: '18px' }}>
+                  <div className="user-title" style={{ fontSize: '14px', fontWeight: '800' }}>{resetUserName}</div>
+                  <div className="user-subtitle" style={{ fontSize: '12.5px' }}>{resetUserEmail}</div>
                 </div>
 
                 {resetError && (

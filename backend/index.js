@@ -215,6 +215,7 @@ const initDatabase = async () => {
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username VARCHAR(100);
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
+        ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;
 
       -- Migración automática: los administradores sin tenant_id son sus propios tenants
       UPDATE usuarios SET tenant_id = id WHERE tenant_id IS NULL AND rol != 'superadmin';
@@ -495,8 +496,20 @@ app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
 
     const user = rows[0];
 
-    // Verificar si el usuario está bloqueado o suspendido
-    if (user.activo === false) {
+      // Verificar SaaS: suscripción expirada
+      if (user.rol !== 'superadmin' && user.fecha_vencimiento) {
+        const vencimiento = new Date(user.fecha_vencimiento);
+        const ahora = new Date();
+        if (ahora > vencimiento) {
+          if (user.activo) {
+            await pool.query('UPDATE usuarios SET activo = false WHERE id = $1', [user.id]);
+          }
+          return res.status(403).json({ error: 'Suscripción expirada. Su cuenta ha sido suspendida por falta de pago. Contacte al administrador.' });
+        }
+      }
+
+      // Verificar si el usuario está bloqueado o suspendido
+      if (user.activo === false) {
       return res.status(403).json({ error: 'Tu cuenta ha sido suspendida o bloqueada por el Super Administrador. Contacta a soporte.' });
     }
 
@@ -561,7 +574,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Acceso denegado. Solo administradores y superadmin pueden ver usuarios.' });
     }
     
-    let query = 'SELECT id, nombre, email, username, rol, activo, tenant_id, created_at FROM usuarios';
+    let query = 'SELECT id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at FROM usuarios';
     let params = [];
     
     if (req.user.rol !== 'superadmin') {
@@ -652,7 +665,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { nombre, email, username, password, rol, activo, tenant_id } = req.body;
+    const { nombre, email, username, password, rol, activo, tenant_id, fecha_vencimiento } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre es requerido.' });
@@ -703,15 +716,15 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     let queryParams = [];
 
     if (password && password.trim().length >= 6) {
-      const hashedPassword = await bcrypt.hash(password.trim(), 10);
-      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, password = $7 WHERE id = $8 RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at`;
-      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, hashedPassword, id];
-    } else {
-      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6 WHERE id = $7 RETURNING id, nombre, email, username, rol, activo, tenant_id, created_at`;
-      queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, id];
-    }
-
-    const result = await pool.query(queryText, queryParams);
+        const hashedPassword = await bcrypt.hash(password.trim(), 10);
+        queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, password = $7, fecha_vencimiento = $8 WHERE id = $9 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
+        queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, hashedPassword, fecha_vencimiento !== undefined ? fecha_vencimiento : currentTarget.fecha_vencimiento, id];
+      } else {
+        queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, fecha_vencimiento = $7 WHERE id = $8 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
+        queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, fecha_vencimiento !== undefined ? fecha_vencimiento : currentTarget.fecha_vencimiento, id];
+      }
+  
+      const result = await pool.query(queryText, queryParams);
     res.json({
       message: 'Usuario actualizado exitosamente.',
       user: result.rows[0]
