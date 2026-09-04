@@ -215,11 +215,18 @@ const initDatabase = async () => {
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username VARCHAR(100);
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
-        ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;
 
       -- Migración automática: los administradores sin tenant_id son sus propios tenants
       UPDATE usuarios SET tenant_id = id WHERE tenant_id IS NULL AND rol != 'superadmin';
     `);
+
+    // Migración segura garantizada para fecha_vencimiento
+    try {
+      await pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;');
+    } catch (colErr) {
+      console.warn('Verificación fecha_vencimiento:', colErr.message);
+    }
 
     // 1.1 Asegurar Super Administrador por defecto
     const superCheck = await pool.query(
@@ -667,10 +674,6 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { nombre, email, username, password, rol, activo, tenant_id, fecha_vencimiento } = req.body;
 
-    if (!nombre) {
-      return res.status(400).json({ error: 'El nombre es requerido.' });
-    }
-
     // Verificar si el usuario a editar existe
     const targetUser = await pool.query('SELECT * FROM usuarios WHERE id = $1', [id]);
     if (targetUser.rows.length === 0) {
@@ -678,6 +681,11 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
     }
 
     const currentTarget = targetUser.rows[0];
+    const finalNombre = (nombre && String(nombre).trim()) ? String(nombre).trim() : currentTarget.nombre;
+
+    if (!finalNombre) {
+      return res.status(400).json({ error: 'El nombre es requerido.' });
+    }
 
     // Si el usuario actual no es superadmin, verificar que pertenezca a su mismo tenant
     if (req.user.rol !== 'superadmin') {
@@ -706,32 +714,99 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Asegurar columna fecha_vencimiento
+    try {
+      await pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;');
+    } catch (e) {
+      // ignore
+    }
+
     const newActivo = activo !== undefined ? activo : currentTarget.activo;
     const finalUsername = username ? username.trim().toLowerCase() : currentTarget.username;
     const finalEmail = email ? email.trim().toLowerCase() : currentTarget.email;
     const finalRol = rol || currentTarget.rol;
     const finalTenantId = req.user.rol === 'superadmin' && tenant_id !== undefined ? tenant_id : currentTarget.tenant_id;
+    const finalFechaVencimiento = fecha_vencimiento !== undefined ? fecha_vencimiento : currentTarget.fecha_vencimiento;
 
     let queryText = '';
     let queryParams = [];
 
     if (password && password.trim().length >= 6) {
-        const hashedPassword = await bcrypt.hash(password.trim(), 10);
-        queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, password = $7, fecha_vencimiento = $8 WHERE id = $9 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
-        queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, hashedPassword, fecha_vencimiento !== undefined ? fecha_vencimiento : currentTarget.fecha_vencimiento, id];
-      } else {
-        queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, fecha_vencimiento = $7 WHERE id = $8 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
-        queryParams = [nombre.trim(), finalEmail, finalUsername, finalRol, newActivo, finalTenantId, fecha_vencimiento !== undefined ? fecha_vencimiento : currentTarget.fecha_vencimiento, id];
-      }
-  
-      const result = await pool.query(queryText, queryParams);
+      const hashedPassword = await bcrypt.hash(password.trim(), 10);
+      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, password = $7, fecha_vencimiento = $8 WHERE id = $9 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
+      queryParams = [finalNombre, finalEmail, finalUsername, finalRol, newActivo, finalTenantId, hashedPassword, finalFechaVencimiento, id];
+    } else {
+      queryText = `UPDATE usuarios SET nombre = $1, email = $2, username = $3, rol = $4, activo = $5, tenant_id = $6, fecha_vencimiento = $7 WHERE id = $8 RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`;
+      queryParams = [finalNombre, finalEmail, finalUsername, finalRol, newActivo, finalTenantId, finalFechaVencimiento, id];
+    }
+
+    const result = await pool.query(queryText, queryParams);
     res.json({
       message: 'Usuario actualizado exitosamente.',
       user: result.rows[0]
     });
   } catch (err) {
     console.error('Error al actualizar usuario:', err);
-    res.status(500).json({ error: 'Error interno al actualizar usuario.' });
+    res.status(500).json({ error: 'Error interno al actualizar usuario: ' + err.message });
+  }
+});
+
+// Asignar y Renovar Suscripción SaaS (Exclusivo SuperAdmin)
+app.patch('/api/users/:id/subscription', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.rol !== 'superadmin') {
+      return res.status(403).json({ error: 'Acceso denegado. Solo el Super Administrador puede gestionar suscripciones.' });
+    }
+
+    const { id } = req.params;
+    const { fecha_vencimiento, meses, activo = true } = req.body;
+
+    // Asegurar migración de columna fecha_vencimiento si no se había aplicado
+    try {
+      await pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP;');
+    } catch (e) {
+      // ignore
+    }
+
+    const userCheck = await pool.query('SELECT * FROM usuarios WHERE id = $1', [id]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    const currentTarget = userCheck.rows[0];
+    let newFechaVenc = fecha_vencimiento;
+
+    if (!newFechaVenc && meses) {
+      const m = parseInt(meses, 10) || 1;
+      const baseDate = currentTarget.fecha_vencimiento ? new Date(currentTarget.fecha_vencimiento) : (currentTarget.created_at ? new Date(currentTarget.created_at) : new Date());
+      let d = new Date(baseDate);
+      d.setMonth(d.getMonth() + m);
+      if (d < new Date()) {
+        d = new Date();
+        d.setMonth(d.getMonth() + m);
+      }
+      newFechaVenc = d.toISOString();
+    }
+
+    if (!newFechaVenc) {
+      return res.status(400).json({ error: 'Se requiere una fecha de vencimiento o número de meses válido.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE usuarios 
+       SET fecha_vencimiento = $1, activo = $2 
+       WHERE id = $3 
+       RETURNING id, nombre, email, username, rol, activo, tenant_id, fecha_vencimiento, created_at`,
+      [newFechaVenc, activo !== false, id]
+    );
+
+    res.json({
+      message: 'Suscripción asignada y activada exitosamente.',
+      user: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Error al renovar suscripción:', err);
+    res.status(500).json({ error: 'Error interno al renovar suscripción: ' + err.message });
   }
 });
 

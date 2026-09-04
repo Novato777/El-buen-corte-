@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: el-buen-corte-backend
+    name: el-buen-corte-api
     runtime: node
     rootDir: backend
     buildCommand: npm install

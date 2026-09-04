@@ -8806,18 +8806,40 @@ function SuperAdminPortal({
         targetDate.setMonth(targetDate.getMonth() + months)
       }
 
-      const res = await fetch(`${API_BASE}/users/${renovarUser.id}`, {
-        method: 'PUT',
+      // 1. Intentar con el endpoint dedicado y directo para suscripciones
+      let res = await fetch(`${API_BASE}/users/${renovarUser.id}/subscription`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
-          nombre: renovarUser.nombre,
           fecha_vencimiento: targetDate.toISOString(),
+          meses: months,
           activo: true
         })
       })
 
+      // 2. Si el endpoint dedicado no está disponible aún (404/405), usar PUT como respaldo
+      if (!res.ok && (res.status === 404 || res.status === 405)) {
+        res = await fetch(`${API_BASE}/users/${renovarUser.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            nombre: renovarUser.nombre,
+            fecha_vencimiento: targetDate.toISOString(),
+            activo: true
+          })
+        })
+      }
+
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo renovar la suscripción')
+
+      // Actualizar estado local de forma reactiva e instantánea
+      const updatedUser = data.user || {
+        ...renovarUser,
+        fecha_vencimiento: targetDate.toISOString(),
+        activo: true
+      }
+      setUsersList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
 
       notifySuccess(`¡Suscripción de "${renovarUser.nombre}" renovada con éxito hasta el ${targetDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}!`)
       setRenovarModalOpen(false)
