@@ -3749,7 +3749,7 @@ function PosAdminSystem() {
                       setShowAddIncomeModal(true)
                     }}
                   >
-                    <PlusIcon /> 🛒 Registrar Venta / Ingreso
+                    <PlusIcon /> 🛒 <span className="btn-label-desktop">Registrar Venta / Ingreso</span><span className="btn-label-mobile">Registrar Venta</span>
                   </button>
                   <button 
                     className="btn btn-secondary btn-egreso"
@@ -3758,7 +3758,7 @@ function PosAdminSystem() {
                       setShowAddExpenseModal(true)
                     }}
                   >
-                    <PlusIcon /> Registrar Egreso / Gasto
+                    <PlusIcon /> 💸 <span className="btn-label-desktop">Registrar Egreso / Gasto</span><span className="btn-label-mobile">Registrar Gasto</span>
                   </button>
                 </div>
                 <div className="contabilidad-caja-btn-wrapper">
