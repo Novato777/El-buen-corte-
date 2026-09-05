@@ -423,15 +423,15 @@ export default function SuperAdminPortal({
           </button>
 
           {/* Perfil del SuperAdmin */}
-          <div className="superadmin-header-profile" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 14px', borderRadius: '12px' }}>
-            <div className="user-avatar-circle avatar-superadmin" style={{ width: 32, height: 32, fontSize: 12 }}>
+          <div className="superadmin-header-profile">
+            <div className="user-avatar-circle avatar-superadmin">
               👑
             </div>
-            <div style={{ textAlign: 'left' }}>
-              <div className="profile-name" style={{ fontSize: '13px', fontWeight: '800', lineHeight: 1.1 }}>
+            <div className="superadmin-header-profile-text">
+              <div className="profile-name">
                 {currentUser?.nombre || 'Super Administrador'}
               </div>
-              <div className="profile-email" style={{ fontSize: '11px' }}>
+              <div className="profile-email">
                 {currentUser?.email}
               </div>
             </div>
@@ -439,10 +439,9 @@ export default function SuperAdminPortal({
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary superadmin-header-action-btn"
             onClick={fetchUsers}
             disabled={usersLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px' }}
             title="Refrescar usuarios"
           >
             <RefreshIcon className={usersLoading ? 'animate-spin' : ''} style={{ width: 15, height: 15 }} />
@@ -451,9 +450,8 @@ export default function SuperAdminPortal({
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary superadmin-header-action-btn superadmin-header-logout-btn"
             onClick={handleLogout}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', color: '#ef4444' }}
             title="Cerrar Sesión"
           >
             <LogOutIcon style={{ width: 15, height: 15 }} />
@@ -476,12 +474,11 @@ export default function SuperAdminPortal({
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div className="superadmin-hero-actions">
             <button
               type="button"
-              className="btn btn-gold"
+              className="btn btn-gold superadmin-hero-btn"
               onClick={() => setRegModalOpen(true)}
-              style={{ padding: '12px 24px', fontSize: '15px', minHeight: '46px' }}
             >
               <PlusIcon style={{ width: 18, height: 18 }} />
               Nuevo Consumidor / Usuario
@@ -561,46 +558,56 @@ export default function SuperAdminPortal({
 
         {/* Directorio de Usuarios y Control */}
         <div style={{ width: '100%' }}>
-          <div className="card" style={{ borderRadius: '18px' }}>
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
-              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', margin: 0 }}>
-                <UsersIcon style={{ width: 18, height: 18, color: '#4f46e5' }} /> Directorio y Control de Usuarios ({filteredUsers.length})
+          <div className="card superadmin-users-card">
+            <div className="card-header superadmin-card-header">
+              <div className="card-title superadmin-card-title">
+                <UsersIcon style={{ width: 18, height: 18, color: '#4f46e5' }} />
+                <span>Directorio y Control de Usuarios ({filteredUsers.length})</span>
               </div>
               <button
                 type="button"
-                className="btn btn-gold"
+                className="btn btn-gold superadmin-card-header-btn"
                 onClick={() => setRegModalOpen(true)}
-                style={{ padding: '8px 16px', fontSize: '13px', minHeight: '38px' }}
               >
                 <PlusIcon style={{ width: 14, height: 14 }} /> Nuevo
               </button>
             </div>
 
-            <div className="card-body" style={{ padding: '18px' }}>
+            <div className="card-body superadmin-card-body">
               {/* Barra de Búsqueda y Filtros */}
               <div className="superadmin-toolbar">
                 <div className="superadmin-search-box">
                   <span className="search-icon"><SearchIcon /></span>
                   <input
-                    type="search"
-                    name="admin_user_search_filter"
-                    id="admin_user_search_filter"
+                    type="text"
+                    role="searchbox"
+                    name="superadmin_user_query"
+                    id="superadmin_user_query"
                     autoComplete="off"
                     autoCorrect="off"
+                    autoCapitalize="none"
                     spellCheck="false"
                     data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    data-dashlane-ignore="true"
+                    data-tempmail-ignore="true"
                     data-form-type="other"
                     className="superadmin-search-input"
-                    placeholder="Buscar por nombre, usuario o email..."
+                    placeholder="Buscar usuario o cuenta..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
+                    style={{
+                      backgroundImage: 'none',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: '0 0'
+                    }}
                   />
                 </div>
 
                 <div className="superadmin-filter-group">
                   <select
-                    className="input-control"
-                    style={{ width: 'auto', minWidth: '150px', padding: '8px 12px' }}
+                    className="input-control superadmin-filter-select"
                     value={userRoleFilter}
                     onChange={(e) => setUserRoleFilter(e.target.value)}
                   >
@@ -612,8 +619,7 @@ export default function SuperAdminPortal({
                   </select>
 
                   <select
-                    className="input-control"
-                    style={{ width: 'auto', minWidth: '150px', padding: '8px 12px' }}
+                    className="input-control superadmin-filter-select"
                     value={userStatusFilter}
                     onChange={(e) => setUserStatusFilter(e.target.value)}
                   >
@@ -743,8 +749,8 @@ export default function SuperAdminPortal({
 
                               {/* Celda Vencimiento con botones de Renovar e Información */}
                               <td style={{ textAlign: 'center', minWidth: '180px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                                  <div style={{ textAlign: 'left', minWidth: '85px' }}>
+                                <div className="superadmin-venc-cell">
+                                  <div className="superadmin-venc-info">
                                     {u.fecha_vencimiento ? (
                                       <div>
                                         <div style={{
@@ -753,12 +759,13 @@ export default function SuperAdminPortal({
                                           color: new Date(u.fecha_vencimiento) < new Date() ? '#ef4444' : '#059669',
                                           display: 'flex',
                                           alignItems: 'center',
-                                          gap: '3px'
+                                          gap: '3px',
+                                          whiteSpace: 'nowrap'
                                         }}>
                                           {new Date(u.fecha_vencimiento) < new Date() ? '⚠️' : '✅'}
                                           {new Date(u.fecha_vencimiento).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
                                         </div>
-                                        <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '500' }}>
+                                        <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '500', whiteSpace: 'nowrap' }}>
                                           {(() => {
                                             const diff = Math.ceil((new Date(u.fecha_vencimiento).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
                                             return diff > 0 ? `${diff}d restantes` : (diff === 0 ? 'Vence hoy' : `Expiró hace ${Math.abs(diff)}d`);
@@ -772,7 +779,7 @@ export default function SuperAdminPortal({
                                     )}
                                   </div>
 
-                                  <div style={{ display: 'flex', gap: '6px' }}>
+                                  <div className="superadmin-venc-actions">
                                     <button
                                       type="button"
                                       className="superadmin-action-btn"
@@ -798,7 +805,7 @@ export default function SuperAdminPortal({
 
                               {/* Celda de Acciones Maestras */}
                               <td style={{ textAlign: 'right' }}>
-                                <div className="superadmin-actions-cell" style={{ justifyContent: 'flex-end' }}>
+                                <div className="superadmin-actions-cell">
                                   <button
                                     type="button"
                                     className="superadmin-action-btn"
@@ -1074,24 +1081,11 @@ export default function SuperAdminPortal({
                 </div>
 
                 <div className="form-group">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div className="superadmin-form-label-row">
                     <label className="form-label" style={{ margin: 0 }}>Contraseña Inicial</label>
                     <button
                       type="button"
                       className="superadmin-btn-generate"
-                      style={{ 
-                        padding: '6px 12px', 
-                        fontSize: '11px', 
-                        fontWeight: '700',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => { e.currentTarget.style.background = '#fde68a'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                      onMouseOut={(e) => { e.currentTarget.style.background = '#fef3c7'; e.currentTarget.style.transform = 'translateY(0)'; }}
                       onClick={() => {
                         const p = generatePass()
                         setRegPassword(p)
@@ -1148,7 +1142,8 @@ export default function SuperAdminPortal({
                   className="btn btn-primary"
                   disabled={regLoading}
                 >
-                  {regLoading ? 'Registrando...' : 'Registrar Usuario'}
+                  <span className="btn-text-desktop">{regLoading ? 'Registrando...' : 'Registrar Usuario'}</span>
+                  <span className="btn-text-mobile">{regLoading ? 'Registrando...' : 'Registrar'}</span>
                 </button>
               </div>
             </form>
@@ -1224,7 +1219,7 @@ export default function SuperAdminPortal({
                     </span>
                   </label>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '12px' }}>
+                  <div className="superadmin-renovar-plans-grid">
                     {[
                       { label: '1 Mes', val: '1', badge: 'Básico' },
                       { label: '3 Meses', val: '3', badge: 'Popular' },
@@ -1263,7 +1258,7 @@ export default function SuperAdminPortal({
                     })}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12px', color: '#64748b' }}>O ingresa meses personalizados:</span>
                     <input
                       type="number"
@@ -1299,14 +1294,14 @@ export default function SuperAdminPortal({
                       flexDirection: 'column',
                       gap: '8px'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#166534' }}>
+                      <div className="superadmin-calc-row">
                         <span>📅 Fecha de Registro:</span>
                         <strong style={{ color: '#14532d' }}>
                           {regDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' })}
                         </strong>
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', color: '#166534' }}>
+                      <div className="superadmin-calc-row">
                         <span>⏳ Base de conteo:</span>
                         <strong>
                           {hasPrevVenc 
@@ -1316,13 +1311,15 @@ export default function SuperAdminPortal({
                         </strong>
                       </div>
 
-                      <div style={{
+                      <div className="superadmin-calc-row superadmin-calc-row-highlight" style={{
                         marginTop: '4px',
                         paddingTop: '8px',
                         borderTop: '1px dashed #86efac',
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px'
                       }}>
                         <span style={{ fontSize: '13px', fontWeight: '700', color: '#14532d' }}>
                           🚀 Nueva Fecha de Vencimiento:
@@ -1357,7 +1354,8 @@ export default function SuperAdminPortal({
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#2563eb', borderColor: '#2563eb' }}
                 >
                   <ClockIcon style={{ width: 16, height: 16 }} />
-                  {renovarLoading ? 'Guardando...' : 'Confirmar Suscripción'}
+                  <span className="btn-text-desktop">{renovarLoading ? 'Guardando...' : 'Confirmar Suscripción'}</span>
+                  <span className="btn-text-mobile">{renovarLoading ? 'Guardando...' : 'Confirmar'}</span>
                 </button>
               </div>
             </form>
@@ -1565,7 +1563,8 @@ export default function SuperAdminPortal({
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', borderColor: '#2563eb' }}
               >
                 <ClockIcon style={{ width: 16, height: 16 }} />
-                Renovar Suscripción Ahora
+                <span className="btn-text-desktop">Renovar Suscripción Ahora</span>
+                <span className="btn-text-mobile">Renovar Ahora</span>
               </button>
             </div>
           </div>
@@ -1606,9 +1605,9 @@ export default function SuperAdminPortal({
                 )}
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div className="superadmin-form-label-row">
                     <label className="form-label" style={{ margin: 0 }}>Nueva Contraseña Asignada</label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div className="superadmin-form-label-actions">
                       <button
                         type="button"
                         className="btn btn-secondary"
@@ -1669,7 +1668,8 @@ export default function SuperAdminPortal({
                   className="btn btn-primary"
                   disabled={resetLoading}
                 >
-                  {resetLoading ? 'Guardando...' : 'Asignar Contraseña'}
+                  <span className="btn-text-desktop">{resetLoading ? 'Guardando...' : 'Asignar Contraseña'}</span>
+                  <span className="btn-text-mobile">{resetLoading ? 'Guardando...' : 'Asignar'}</span>
                 </button>
               </div>
             </form>
@@ -1777,7 +1777,8 @@ export default function SuperAdminPortal({
                   className="btn btn-primary"
                   disabled={editUserLoading}
                 >
-                  {editUserLoading ? 'Guardando...' : 'Guardar Cambios'}
+                  <span className="btn-text-desktop">{editUserLoading ? 'Guardando...' : 'Guardar Cambios'}</span>
+                  <span className="btn-text-mobile">{editUserLoading ? 'Guardando...' : 'Guardar'}</span>
                 </button>
               </div>
             </form>

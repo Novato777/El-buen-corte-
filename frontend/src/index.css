@@ -3222,92 +3222,9 @@ form.modal-card,
     gap: 16px;
   }
 
-  /* SuperAdmin Portal Mobile */
-  .superadmin-standalone-header {
-    padding: 12px 16px;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .superadmin-standalone-brand {
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .superadmin-standalone-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .superadmin-standalone-container {
-    padding: 16px 12px 48px 12px;
-  }
-
-  .superadmin-hero-banner {
-    padding: 18px 16px;
-    border-radius: 16px;
-    gap: 14px;
-  }
-
-  .superadmin-hero-title {
-    font-size: 19px;
-  }
-
-  .superadmin-hero-desc {
-    font-size: 13px;
-  }
-
-  .superadmin-kpis {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  .superadmin-kpi-card {
-    padding: 16px;
-  }
-
-  .superadmin-kpi-val {
-    font-size: 26px;
-  }
-
-  .superadmin-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .superadmin-search-box {
-    max-width: 100% !important;
-    width: 100% !important;
-  }
-
-  .superadmin-filter-group {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .superadmin-filter-group select {
-    flex: 1;
-    min-width: 0 !important;
-  }
-
-  .superadmin-table-container {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-radius: 12px;
-  }
-
-  .superadmin-data-table {
-    min-width: 620px;
-    font-size: 13px;
+  /* SuperAdmin Portal Mobile Base */
+  .superadmin-standalone-wrapper {
+    overflow-x: hidden;
   }
 
   /* Modals en móviles y pantallas táctiles */
@@ -4756,6 +4673,192 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .superadmin-action-btn-primary:hover {
   background: #e0e7ff;
   color: #4f46e5;
+}
+
+/* Base utility for responsive button text */
+.btn-text-mobile {
+  display: none;
+}
+.btn-text-desktop {
+  display: inline;
+}
+
+/* SuperAdmin Header Profile & Action Buttons */
+.superadmin-header-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+[data-theme="dark"] .superadmin-header-profile {
+  background: #0f172a;
+  border-color: #334155;
+}
+.superadmin-header-profile-text {
+  text-align: left;
+}
+.superadmin-header-profile .profile-name {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f172a;
+}
+[data-theme="dark"] .superadmin-header-profile .profile-name {
+  color: #f8fafc;
+}
+.superadmin-header-profile .profile-email {
+  font-size: 11px;
+  color: #64748b;
+}
+[data-theme="dark"] .superadmin-header-profile .profile-email {
+  color: #94a3b8;
+}
+.superadmin-header-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+}
+.superadmin-header-logout-btn {
+  color: #ef4444 !important;
+}
+
+/* SuperAdmin Hero Actions */
+.superadmin-hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.superadmin-hero-btn {
+  padding: 12px 24px;
+  font-size: 15px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* SuperAdmin Users Card & Toolbar Base */
+.superadmin-users-card {
+  border-radius: 18px;
+  width: 100%;
+}
+.superadmin-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+[data-theme="dark"] .superadmin-card-header {
+  border-bottom-color: #334155;
+}
+.superadmin-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  margin: 0;
+  font-weight: 700;
+}
+.superadmin-card-body {
+  padding: 18px;
+}
+.superadmin-filter-select {
+  width: auto;
+  min-width: 150px;
+  padding: 8px 12px;
+}
+
+/* SuperAdmin Table Cells & Vencimiento Base */
+.superadmin-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+}
+[data-theme="dark"] .superadmin-table-container {
+  border-color: #334155;
+}
+.superadmin-data-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  text-align: left;
+}
+.superadmin-actions-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+.superadmin-venc-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.superadmin-venc-info {
+  text-align: left;
+  min-width: 85px;
+}
+.superadmin-venc-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* SuperAdmin Modals Responsive Form Rows & Presets */
+.superadmin-form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.superadmin-form-label-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.superadmin-renovar-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.superadmin-calc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #166534;
+}
+[data-theme="dark"] .superadmin-calc-row {
+  color: #86efac;
+}
+.superadmin-calc-row-highlight {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed #86efac;
+}
+[data-theme="dark"] .superadmin-calc-row-highlight {
+  border-top-color: #166534;
 }
 
 
@@ -9096,17 +9199,40 @@ td {
    ========================================================================== */
 
 /* --- Search Input AutoFill & Extension Shield --- */
-.superadmin-search-input {
+.superadmin-search-input,
+.superadmin-search-input:focus,
+.superadmin-search-input:hover,
+.superadmin-search-input:active {
   background-image: none !important;
   background-repeat: no-repeat !important;
+  background-size: 0 0 !important;
 }
 
-[data-theme="dark"] .superadmin-search-input {
+[data-theme="dark"] .superadmin-search-input,
+[data-theme="dark"] .superadmin-search-input:hover {
   background-color: #1e293b !important;
   background-image: none !important;
+  background-repeat: no-repeat !important;
+  background-size: 0 0 !important;
   border-color: #334155 !important;
   color: #f8fafc !important;
   -webkit-text-fill-color: #f8fafc !important;
+}
+
+[data-theme="dark"] .superadmin-search-input:focus {
+  background-color: #0f172a !important;
+  background-image: none !important;
+  background-repeat: no-repeat !important;
+  background-size: 0 0 !important;
+  border-color: #3b82f6 !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+}
+
+[data-theme="dark"] .superadmin-search-input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
 }
 
 [data-theme="dark"] .superadmin-search-input:-webkit-autofill,
@@ -9548,14 +9674,241 @@ td {
 }
 
 /* ============================================================================
-   👑 SUPERADMIN MÓVIL: TARJETAS TÁCTILES ERGONÓMICAS
+   👑 SUPERADMIN: RESPONSIVE DESIGN MAESTRO (TABLET, MÓVIL Y PANTALLAS PEQUEÑAS)
    ============================================================================ */
 
 .superadmin-users-mobile-list {
   display: none;
 }
 
+/* 💻 1. TABLETS Y LLEGAR A LAPTOPS (769px - 1024px) */
+@media (max-width: 1024px) {
+  .superadmin-standalone-container {
+    padding: 24px 16px 48px !important;
+  }
+
+  .superadmin-hero-banner {
+    padding: 24px 20px !important;
+    gap: 16px !important;
+  }
+
+  .superadmin-hero-title {
+    font-size: 22px !important;
+  }
+
+  .superadmin-table-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .superadmin-data-table {
+    min-width: 960px !important;
+  }
+}
+
+/* 📱 2. VISTA MÓVIL PRINCIPAL (<= 768px: ANDROID Y IPHONE) */
 @media (max-width: 768px) {
+  .btn-text-desktop {
+    display: none !important;
+  }
+
+  .btn-text-mobile {
+    display: inline !important;
+  }
+
+  /* Header Móvil Ultra-Ergonómico */
+  .superadmin-standalone-header {
+    padding: 10px 14px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .superadmin-standalone-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .superadmin-standalone-logo {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 17px !important;
+    border-radius: 10px !important;
+  }
+
+  .superadmin-standalone-title {
+    font-size: 14.5px !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .superadmin-standalone-subtitle {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+  }
+
+  .superadmin-standalone-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .superadmin-header-profile {
+    padding: 4px 8px !important;
+    gap: 6px !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .superadmin-header-profile .profile-email {
+    display: none !important;
+  }
+
+  .superadmin-header-profile .profile-name {
+    font-size: 12px !important;
+    max-width: 120px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .superadmin-header-action-btn {
+    padding: 0 !important;
+    min-width: 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .theme-toggle-btn {
+    padding: 6px 10px !important;
+    height: 38px !important;
+    font-size: 12px !important;
+    flex-shrink: 0 !important;
+    border-radius: 8px !important;
+  }
+
+  /* Contenedor Principal en Móvil */
+  .superadmin-standalone-container {
+    padding: 14px 10px 48px 10px !important;
+  }
+
+  /* Banner Hero en Móvil */
+  .superadmin-hero-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 18px 16px !important;
+    gap: 14px !important;
+    border-radius: 16px !important;
+  }
+
+  .superadmin-hero-content {
+    max-width: 100% !important;
+  }
+
+  .superadmin-hero-title {
+    font-size: 18px !important;
+  }
+
+  .superadmin-hero-desc {
+    font-size: 12.5px !important;
+    line-height: 1.5 !important;
+  }
+
+  .superadmin-hero-actions {
+    width: 100% !important;
+  }
+
+  .superadmin-hero-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+    padding: 11px 16px !important;
+    min-height: 44px !important;
+  }
+
+  /* KPIs Móviles */
+  .superadmin-kpis {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .superadmin-kpi-card {
+    padding: 12px !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+
+  .superadmin-kpi-icon-wrapper {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .superadmin-kpi-val {
+    font-size: 20px !important;
+  }
+
+  .superadmin-kpi-title {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
+  }
+
+  /* Directorio Card & Toolbar en Móvil */
+  .superadmin-card-header {
+    padding: 12px 14px !important;
+  }
+
+  .superadmin-card-title {
+    font-size: 14.5px !important;
+    flex: 1 !important;
+    min-width: 180px !important;
+  }
+
+  .superadmin-card-body {
+    padding: 12px 10px !important;
+  }
+
+  .superadmin-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .superadmin-search-box {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .superadmin-filter-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .superadmin-filter-select {
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 12px !important;
+    padding: 8px 6px !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Ocultar tabla desktop y activar tarjetas móviles */
   .superadmin-table-container {
     display: none !important;
   }
@@ -9613,6 +9966,7 @@ td {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
   }
 
   [data-theme="dark"] .user-card-mobile-name {
@@ -9644,6 +9998,8 @@ td {
     background: #f8fafc;
     border-radius: 10px;
     border: 1px solid #f1f5f9;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   [data-theme="dark"] .user-card-mobile-sub {
@@ -9655,6 +10011,7 @@ td {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
 
   .sub-label {
@@ -9667,11 +10024,13 @@ td {
   .sub-status {
     font-size: 12.5px;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   .sub-actions-quick {
     display: flex;
     gap: 6px;
+    flex-shrink: 0;
   }
 
   .user-card-mobile-actions {
@@ -9692,8 +10051,8 @@ td {
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 8px 4px;
-    min-height: 44px;
+    padding: 7px 3px;
+    min-height: 42px;
     border-radius: 8px;
     border: 1px solid #e2e8f0;
     background: #ffffff;
@@ -9723,45 +10082,47 @@ td {
     cursor: not-allowed;
   }
 
-  /* Toolbar en SuperAdmin Mobile */
-  .superadmin-toolbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
+  /* Modales en Móvil */
+  .superadmin-renovar-plans-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
 
-  .superadmin-search-box {
-    width: 100% !important;
+  .superadmin-calc-row {
+    font-size: 11.5px !important;
+    gap: 4px !important;
+  }
+
+  .superadmin-calc-date-pill {
+    font-size: 12.5px !important;
+    padding: 3px 8px !important;
+  }
+}
+
+/* 📲 3. PANTALLAS PEQUEÑAS (<= 440px: GALAXY, IPHONE MINI / SE) */
+@media (max-width: 440px) {
+  .superadmin-kpis {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 
   .superadmin-filter-group {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-    width: 100% !important;
+    grid-template-columns: 1fr !important;
   }
 
-  .superadmin-filter-group select {
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-
-  .superadmin-kpis {
+  .user-card-mobile-actions {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px !important;
+    gap: 8px !important;
   }
 
-  .superadmin-kpi-card {
-    padding: 12px 14px !important;
-    gap: 10px !important;
+  .user-card-action-btn {
+    flex-direction: row !important;
+    gap: 6px !important;
+    padding: 8px 6px !important;
   }
 
-  .superadmin-kpi-val {
-    font-size: 20px !important;
-  }
-
-  .superadmin-kpi-title {
-    font-size: 11.5px !important;
+  .superadmin-header-profile .profile-name {
+    max-width: 90px !important;
   }
 }
 
