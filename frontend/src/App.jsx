@@ -3046,7 +3046,7 @@ function PosAdminSystem() {
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', position: 'relative', zIndex: 1 }}>
-                <div className="filter-tabs">
+                <div className="filter-tabs pedidos-filter-tabs">
                   {[
                     { id: 'Todos', label: 'Todos' },
                     { id: 'Pendiente', label: 'Pendientes' },
@@ -3288,7 +3288,7 @@ function PosAdminSystem() {
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               <div className="filters-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px', position: 'relative', zIndex: 1 }}>
-                <div className="filter-tabs">
+                <div className="filter-tabs inventory-filter-tabs">
                   {['Todos', 'Carnes Rojas', 'Pollos', 'Embutidos', 'Cerdo', 'Otras'].map(cat => (
                     <button 
                       key={cat}
