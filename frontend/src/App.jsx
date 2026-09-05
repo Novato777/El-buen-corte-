@@ -2905,7 +2905,7 @@ function PosAdminSystem() {
                     <h3 className="card-title" style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '18px' }}>
                       Acciones Rápidas
                     </h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+                    <div className="quick-actions-grid">
                       <button 
                         className="btn btn-primary" 
                         onClick={() => {
@@ -2927,20 +2927,27 @@ function PosAdminSystem() {
                           setShowAddStockModal(true);
                         }}
                       >
-                        <BoxIcon /> Abastecer Inventario
+                        <BoxIcon /> <span className="btn-label-desktop">Abastecer Inventario</span><span className="btn-label-mobile">Abastecer Stock</span>
                       </button>
                       <button className="btn btn-danger" onClick={() => setShowAddMermaModal(true)}>
                         <TrashIcon /> Registrar Merma
                       </button>
-                      <button 
-                        className="btn btn-gold" 
-                        onClick={() => {
-                          if(!isCajaAbierta) { alert('La caja ya está cerrada.'); return; }
-                          handleCloseCaja()
-                        }}
-                      >
-                        <StoreIcon /> Cerrar Caja
-                      </button>
+                      {isCajaAbierta ? (
+                        <button 
+                          className="btn btn-gold" 
+                          onClick={handleCloseCaja}
+                        >
+                          <WalletIcon /> Cerrar Caja
+                        </button>
+                      ) : (
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#059669' }}
+                          onClick={() => handleOpenCaja(300000)}
+                        >
+                          <StoreIcon /> Abrir Caja
+                        </button>
+                      )}
                     </div>
                   </div>
 
