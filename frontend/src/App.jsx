@@ -255,13 +255,9 @@ function PosAdminSystem() {
   });
 
   useEffect(() => {
-    if (isPublicStore) {
-      document.documentElement.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('app_theme', theme);
-    }
-  }, [theme, isPublicStore]);
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
