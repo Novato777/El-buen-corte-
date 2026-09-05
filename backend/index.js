@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { v2 as cloudinary } from 'cloudinary';
 import pool from './db.js';
 import { normalizeUnit, calculateStockDeduction, calculateUnitPriceForSoldUnit, formatStockDisplay, convertQuantity } from './units.js';
+import compression from 'compression';
 import idempotencyMiddleware from './idempotency.js';
 
 dotenv.config();
@@ -31,6 +32,9 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
 });
+
+// Middleware de compresión GZIP de alta eficiencia para optimizar transferencia
+app.use(compression());
 
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
@@ -422,6 +426,23 @@ const initDatabase = async () => {
       );
       console.log('🏢 Perfil de negocio inicial sembrado para sede #1.');
     }
+
+    // 11. Índices de Alto Rendimiento para acelerar búsquedas y filtros O(1)/O(log N)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_inventario_tenant ON inventario(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_pedidos_tenant ON pedidos(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_pedidos_estado ON pedidos(tenant_id, estado);
+      CREATE INDEX IF NOT EXISTS idx_pedidos_created_at ON pedidos(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_transacciones_tenant ON transacciones(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_transacciones_created_at ON transacciones(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_mermas_tenant ON mermas(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_notificaciones_tenant ON notificaciones(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_pedido_items_pedido_id ON pedido_items(pedido_id);
+      CREATE INDEX IF NOT EXISTS idx_usuarios_tenant ON usuarios(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(LOWER(username));
+      CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(LOWER(email));
+    `);
+    console.log('⚡ Índices de alto rendimiento en PostgreSQL verificados y activos.');
 
     console.log('✅ Esquema multitenant de base de datos PostgreSQL verificado y listo.');
   } catch (err) {

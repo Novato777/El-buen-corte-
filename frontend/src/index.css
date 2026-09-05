@@ -5678,17 +5678,57 @@ td {
 
 @media (max-width: 480px) {
   .tienda-products-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
   }
 
   .tienda-card-img-wrapper {
-    height: 160px;
+    height: 120px !important;
+  }
+
+  .tienda-card-body {
+    padding: 10px 8px !important;
+    gap: 4px !important;
+  }
+
+  .tienda-card-title {
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    min-height: 32px !important;
   }
 
   .tienda-card-desc {
-    display: -webkit-box;
-    min-height: auto;
+    display: none !important;
+  }
+
+  .tienda-card-price {
+    font-size: 14px !important;
+    font-weight: 800 !important;
+  }
+
+  .tienda-card-price-unit {
+    font-size: 10px !important;
+  }
+
+  .tienda-card-btn-add {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    min-height: 38px !important;
+  }
+
+  .tienda-card-stepper {
+    min-height: 38px !important;
+  }
+
+  .tienda-stepper-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
+  }
+
+  .tienda-stepper-val {
+    font-size: 12px !important;
+    min-width: 24px !important;
   }
 }
 
@@ -8562,3 +8602,365 @@ td {
 [data-theme="dark"] .superadmin-btn-generate:hover {
   background: rgba(245, 158, 11, 0.3) !important;
 }
+
+/* ============================================================================
+   📱 BARRA DE NAVEGACIÓN INFERIOR MÓVIL (BOTTOM NAVIGATION BAR ERGONÓMICA)
+   ============================================================================ */
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+    z-index: 1050;
+    align-items: center;
+    justify-content: space-around;
+  }
+
+  [data-theme="dark"] .mobile-bottom-nav {
+    background: #0f172a !important;
+    border-top-color: #1e293b !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  .mobile-bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 100%;
+    min-height: 48px;
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-bottom-nav-item:active {
+    transform: scale(0.94);
+  }
+
+  .mobile-bottom-nav-item.active {
+    color: #dc2626;
+  }
+
+  [data-theme="dark"] .mobile-bottom-nav-item.active {
+    color: #ef4444 !important;
+  }
+
+  .mobile-bottom-nav-badge {
+    position: absolute;
+    top: -5px;
+    right: -9px;
+    background: #dc2626;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    min-width: 17px;
+    height: 17px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  }
+
+  .mobile-bottom-nav-badge.warning {
+    background: #d97706;
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.4);
+  }
+
+  .mobile-caja-dot {
+    position: absolute;
+    bottom: 0;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid #ffffff;
+  }
+
+  [data-theme="dark"] .mobile-caja-dot {
+    border-color: #0f172a;
+  }
+
+  .mobile-caja-dot.open {
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+  }
+
+  .mobile-caja-dot.closed {
+    background: #ef4444;
+  }
+
+  /* Espaciado inferior de seguridad para evitar que el bottom nav cubra el contenido */
+  .app-container .main-content {
+    padding-bottom: 80px !important;
+  }
+
+  .page-container {
+    padding-bottom: 84px !important;
+  }
+}
+
+/* ============================================================================
+   👑 SUPERADMIN MÓVIL: TARJETAS TÁCTILES ERGONÓMICAS
+   ============================================================================ */
+
+.superadmin-users-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .superadmin-table-container {
+    display: none !important;
+  }
+
+  .superadmin-users-mobile-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .superadmin-user-card-mobile {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s ease;
+  }
+
+  [data-theme="dark"] .superadmin-user-card-mobile {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .superadmin-user-card-mobile.is-blocked {
+    opacity: 0.8;
+    background: #fffafa;
+    border-color: #fee2e2;
+  }
+
+  [data-theme="dark"] .superadmin-user-card-mobile.is-blocked {
+    background: #2a1b1b !important;
+    border-color: #451a1a !important;
+  }
+
+  .user-card-mobile-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .user-card-mobile-details {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .user-card-mobile-name {
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  [data-theme="dark"] .user-card-mobile-name {
+    color: #f8fafc !important;
+  }
+
+  .user-card-mobile-meta {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-card-mobile-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  .user-card-mobile-sub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #f1f5f9;
+  }
+
+  [data-theme="dark"] .user-card-mobile-sub {
+    background: #0f172a !important;
+    border-color: #1e293b !important;
+  }
+
+  .sub-info-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sub-label {
+    font-size: 10.5px;
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .sub-status {
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .sub-actions-quick {
+    display: flex;
+    gap: 6px;
+  }
+
+  .user-card-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid #f1f5f9;
+  }
+
+  [data-theme="dark"] .user-card-mobile-actions {
+    border-top-color: #334155 !important;
+  }
+
+  .user-card-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px;
+    min-height: 44px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  [data-theme="dark"] .user-card-action-btn {
+    background: #0f172a !important;
+    border-color: #334155 !important;
+    color: #cbd5e1 !important;
+  }
+
+  .user-card-action-btn:active {
+    transform: scale(0.95);
+  }
+
+  .user-card-action-btn.btn-danger-action {
+    color: #ef4444;
+  }
+
+  .user-card-action-btn.btn-danger-action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Toolbar en SuperAdmin Mobile */
+  .superadmin-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .superadmin-search-box {
+    width: 100% !important;
+  }
+
+  .superadmin-filter-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .superadmin-filter-group select {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .superadmin-kpis {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .superadmin-kpi-card {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+
+  .superadmin-kpi-val {
+    font-size: 20px !important;
+  }
+
+  .superadmin-kpi-title {
+    font-size: 11.5px !important;
+  }
+}
+
+/* ============================================================================
+   ⚡ LOW-END PCS & REDUCED MOTION SUPPORT
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.public-store-header-inner {
+  padding: 14px 20px;
+}
+
+@media (max-width: 480px) {
+  .public-store-header-inner {
+    padding: 10px 14px;
+  }
+}
+

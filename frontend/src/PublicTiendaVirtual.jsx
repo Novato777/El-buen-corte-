@@ -701,14 +701,13 @@ export default function PublicTiendaVirtual() {
         zIndex: 100,
         boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
       }}>
-        <div style={{
+        <div className="public-store-header-inner" style={{
           maxWidth: '1280px',
           margin: '0 auto',
-          padding: '14px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '16px'
+          gap: '12px'
         }}>
           {/* Logo & Marca Dinámica desde Perfil */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
