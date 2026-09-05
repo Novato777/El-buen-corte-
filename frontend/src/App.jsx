@@ -2797,26 +2797,16 @@ function PosAdminSystem() {
                     )}
                   </div>
 
-                  <div style={{ padding: '9px 14px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="notification-dropdown-footer">
                     <button
                       type="button"
+                      className="notification-voice-btn"
                       onClick={() => playOrderVoiceNotification("Tienes un nuevo pedido")}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#2563eb',
-                        fontSize: '11.5px',
-                        fontWeight: '700',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
                       title="Probar sonido y voz del sistema"
                     >
                       <span>🔊</span> Probar voz ("Tienes un nuevo pedido")
                     </button>
-                    <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '600' }}>Alerta en tiempo real</span>
+                    <span className="notification-realtime-badge">Alerta en tiempo real</span>
                   </div>
                 </div>
               )}
