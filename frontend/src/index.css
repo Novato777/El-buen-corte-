@@ -2232,52 +2232,77 @@ form.modal-card,
 
 .inventory-card-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.inventory-price-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.inventory-old-price {
-  font-size: 11.5px;
-  color: #94a3b8;
-  text-decoration: line-through;
-  margin-right: 6px;
-}
-
-.inventory-final-price {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--accent-gold);
-}
-
-.inventory-final-price.discount {
-  color: #dc2626;
-  font-weight: 900;
-}
-
+.inventory-price-box,
 .inventory-stock-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inventory-price-label,
+.inventory-stock-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.inventory-price-values {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
   text-align: right;
 }
 
-.inventory-stock-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  font-weight: 600;
+.inventory-old-price {
+  font-size: 11px;
+  color: #94a3b8;
+  text-decoration: line-through;
+  white-space: nowrap;
+}
+
+.inventory-final-price {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--accent-gold);
+  white-space: nowrap;
+}
+
+.inventory-final-price.discount {
+  color: #ef4444;
+  font-weight: 900;
 }
 
 .inventory-stock-val {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  font-size: 13.5px;
   font-weight: 800;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 0;
+}
+
+.inventory-stock-num {
+  white-space: nowrap;
 }
 
 .inventory-stock-val.ok {
@@ -2289,9 +2314,16 @@ form.modal-card,
 }
 
 .stock-critical-tag {
-  display: block;
+  display: inline-flex;
+  align-items: center;
   font-size: 9px;
   color: var(--accent-red);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 1px 5px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-weight: 800;
 }
 
 .inventory-card-actions {
@@ -2642,6 +2674,44 @@ form.modal-card,
   color: var(--accent-red);
 }
 
+/* Toggle de etiquetas responsivas en botones */
+.btn-label-desktop {
+  display: inline;
+}
+.btn-label-mobile {
+  display: none;
+}
+
+/* ⚡ Acciones Rápidas (Dashboard) - Grid 2x2 Simétrico en PC y Escritorio */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.quick-actions-grid .btn {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
+  border-radius: 12px;
+  padding: 0 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.quick-actions-grid .btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
   .top-navbar {
     height: 56px !important;
@@ -2868,14 +2938,16 @@ form.modal-card,
     padding: 8px 10px !important;
   }
 
-  /* Inventario 2 Cards per row on mobile */
+  /* Inventario 2 Cards per row on mobile con protección antidesbordamiento */
   .inventory-products-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
   }
 
   .inventory-card-item {
     border-radius: 14px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
   }
 
   .inventory-card-media {
@@ -2883,14 +2955,17 @@ form.modal-card,
   }
 
   .inventory-card-body {
-    padding: 10px !important;
+    padding: 10px 8px !important;
     gap: 6px !important;
+    min-width: 0 !important;
   }
 
   .inventory-card-title {
     font-size: 13px !important;
     font-weight: 800 !important;
-    line-height: 1.2 !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
   }
 
   .inventory-card-desc {
@@ -2899,19 +2974,64 @@ form.modal-card,
 
   .inventory-card-meta {
     padding-top: 6px !important;
+    gap: 4px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  .inventory-price-label {
-    font-size: 9px !important;
+  .inventory-price-box,
+  .inventory-stock-box {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: baseline !important;
+    width: 100% !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+  }
+
+  .inventory-price-label,
+  .inventory-stock-label {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: var(--text-muted) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+  }
+
+  .inventory-price-values {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: flex-end !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .inventory-old-price {
+    font-size: 9.5px !important;
+    white-space: nowrap !important;
   }
 
   .inventory-final-price {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     font-weight: 900 !important;
+    white-space: nowrap !important;
   }
 
   .inventory-stock-val {
     font-size: 12.5px !important;
+    font-weight: 800 !important;
+    gap: 3px !important;
+    white-space: nowrap !important;
+    text-align: right !important;
+  }
+
+  .stock-critical-tag {
+    font-size: 8.5px !important;
+    padding: 1px 3px !important;
+    white-space: nowrap !important;
   }
 
   .inventory-delete-btn {
@@ -2960,63 +3080,32 @@ form.modal-card,
     flex-direction: column !important;
   }
 
-  /* ⚡ Acciones Rápidas (Dashboard) - Grid 2x2 Simétrico */
-.quick-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  width: 100%;
-}
-
-.quick-actions-grid .btn {
-  width: 100%;
-  height: 48px;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 800;
-  border-radius: 12px;
-  padding: 0 12px;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
-@media (max-width: 480px) {
+  /* ⚡ Acciones Rápidas (Dashboard) - Ajustes en Móvil */
   .quick-actions-grid {
-    gap: 8px;
+    gap: 8px !important;
   }
+
   .quick-actions-grid .btn {
-    height: 44px;
-    min-height: 44px;
-    font-size: 12px;
-    padding: 0 6px;
-    gap: 6px;
-    border-radius: 10px;
+    height: 44px !important;
+    min-height: 44px !important;
+    font-size: 12px !important;
+    padding: 0 6px !important;
+    gap: 6px !important;
+    border-radius: 10px !important;
   }
+
   .quick-actions-grid .btn svg {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
+    width: 16px !important;
+    height: 16px !important;
+    flex-shrink: 0 !important;
   }
-}
 
   .btn-label-desktop {
-    display: inline;
-  }
-  .btn-label-mobile {
-    display: none;
+    display: none !important;
   }
 
-  @media (max-width: 768px) {
-    .btn-label-desktop {
-      display: none !important;
-    }
-    .btn-label-mobile {
-      display: inline !important;
-    }
+  .btn-label-mobile {
+    display: inline !important;
   }
 
   /* Contabilidad view toggling & mobile layout */
@@ -3221,41 +3310,116 @@ form.modal-card,
     font-size: 13px;
   }
 
-  /* Modals */
+  /* Modals en móviles y pantallas táctiles */
   .modal-overlay {
-    padding: 12px;
+    padding: 8px !important;
+    box-sizing: border-box !important;
   }
 
   .modal-card {
-    max-width: 100%;
-    max-height: 90vh;
-    border-radius: 16px;
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: calc(100vh - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    border-radius: 16px !important;
+    margin: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .modal-header {
-    padding: 14px 16px;
+    padding: 12px 14px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .modal-header h2,
+  .modal-header h3,
+  .modal-title {
+    font-size: 15px !important;
+    word-break: break-word !important;
   }
 
   .modal-body {
-    padding: 16px;
+    padding: 12px 14px !important;
+    max-height: calc(100dvh - 120px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 1 auto !important;
   }
 
   .modal-footer {
-    padding: 12px 16px;
-    flex-direction: column-reverse;
-    gap: 8px;
+    padding: 10px 14px !important;
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+    flex-shrink: 0 !important;
   }
 
-  .modal-footer button {
-    width: 100%;
-    justify-content: center;
+  .modal-footer button,
+  .modal-footer .btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    font-size: 13.5px !important;
+  }
+
+  /* Formularios en modals colapsables a 1 columna en móvil */
+  .form-row,
+  div.form-row[style*="grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .form-group {
+    margin-bottom: 12px !important;
+    width: 100% !important;
+  }
+
+  .input-control,
+  select.input-control,
+  textarea.input-control {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    font-size: 14px !important;
   }
 }
 
 @media (max-width: 480px) {
   .grid-metrics {
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
+  }
+
+  .metric-card {
+    padding: 10px 8px !important;
+    min-width: 0 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+  }
+
+  .metric-card .card-title {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin-bottom: 2px !important;
+  }
+
+  .metric-value {
+    font-size: clamp(14px, 4.2vw, 17.5px) !important;
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin-bottom: 2px !important;
+  }
+
+  .metric-footer {
+    font-size: 9.5px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
   .navbar-title {
@@ -3285,9 +3449,189 @@ form.modal-card,
   .order-item-row > div:nth-child(3) {
     align-self: flex-end;
   }
+
+  /* Acciones de Pedidos en móvil */
+  .mobile-order-actions-row {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .mobile-order-btn {
+    flex: 1 1 auto !important;
+    min-width: 75px !important;
+    font-size: 11px !important;
+    padding: 6px 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .mobile-order-btn-charge {
+    flex: 1 1 auto !important;
+    min-width: 90px !important;
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+    white-space: nowrap !important;
+  }
+
+  .mobile-order-total-val {
+    font-size: clamp(13px, 3.8vw, 16px) !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* 📱 Dispositivos ultra pequeños (menores a 350px como iPhone SE o pantallas muy estrechas) */
+@media (max-width: 350px) {
+  .inventory-products-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .tienda-products-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .grid-metrics {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  .contabilidad-actions-group {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  .superadmin-kpis {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .inventory-filter-tabs {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .pedidos-filter-tabs {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 /* Business Profile module specific styles */
+.profile-main-card {
+  padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .profile-main-card {
+    padding: 12px 14px !important;
+  }
+}
+
+/* Banner de advertencia de cambios sin guardar en Perfil (Totalmente Responsive) */
+.profile-unsaved-banner {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+  padding: 14px 18px !important;
+  border-radius: var(--radius-lg, 12px) !important;
+  position: relative !important;
+  z-index: 5 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.profile-unsaved-info {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex: 1 1 220px !important;
+  min-width: 0 !important;
+}
+
+.profile-unsaved-icon {
+  font-size: 20px !important;
+  flex-shrink: 0 !important;
+  line-height: 1 !important;
+}
+
+.profile-unsaved-text {
+  font-size: 13.5px !important;
+  line-height: 1.4 !important;
+  word-break: break-word !important;
+}
+
+.profile-unsaved-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+  flex-shrink: 0 !important;
+}
+
+.profile-unsaved-btn {
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.2s ease !important;
+}
+
+@media (max-width: 640px) {
+  .profile-unsaved-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  .profile-unsaved-info {
+    flex: none !important;
+    width: 100% !important;
+  }
+
+  .profile-unsaved-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+
+  .profile-unsaved-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    padding: 8px 6px !important;
+    font-size: 12px !important;
+    text-align: center !important;
+    justify-content: center !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .profile-unsaved-actions {
+    flex-direction: column !important;
+  }
+
+  .profile-unsaved-btn {
+    width: 100% !important;
+    padding: 9px 12px !important;
+  }
+}
+
 .profile-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -9443,4 +9787,781 @@ td {
     padding: 10px 14px;
   }
 }
+
+/* ============================================================================
+   ⏱️ AJUSTES DEL SISTEMA: CONTROL DE INACTIVIDAD SIMÉTRICO Y RESPONSIVE
+   ============================================================================ */
+
+.inactivity-settings-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+/* Selector Simétrico de Unidad (Minutos / Horas) 50% / 50% */
+.inactivity-unit-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  background: var(--bg-input, #f1f5f9);
+  border-radius: 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  box-sizing: border-box;
+  width: 100%;
+}
+
+[data-theme="dark"] .inactivity-unit-toggle {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.inactivity-unit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inactivity-unit-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .inactivity-unit-btn.active {
+  background: #1e293b;
+  color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Stepper Numérico Central Simétrico */
+.inactivity-stepper-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card, #ffffff);
+  border: 2px solid var(--border-color, #e2e8f0);
+  border-radius: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+[data-theme="dark"] .inactivity-stepper-box {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.inactivity-stepper-box:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.inactivity-step-btn {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: var(--bg-input, #f8fafc);
+  color: var(--text-main, #1e293b);
+  font-size: 22px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+[data-theme="dark"] .inactivity-step-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
+.inactivity-step-btn:hover {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.inactivity-step-btn:active {
+  transform: scale(0.93);
+}
+
+.inactivity-display-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.inactivity-number-input {
+  width: 100%;
+  max-width: 100px;
+  border: none;
+  background: transparent;
+  font-size: 34px;
+  font-weight: 900;
+  text-align: center;
+  color: var(--text-main, #1e293b);
+  outline: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
+
+[data-theme="dark"] .inactivity-number-input {
+  color: #ffffff;
+}
+
+.inactivity-display-unit-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: -2px;
+}
+
+/* Grid Simétrico de Presets Rápidos (2 filas de 3 columnas iguales) */
+.inactivity-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.inactivity-preset-btn {
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-main, #334155);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .inactivity-preset-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.inactivity-preset-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.inactivity-preset-btn.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
+}
+
+[data-theme="dark"] .inactivity-preset-btn.active {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+  border-color: #60a5fa;
+}
+
+/* Botón Guardar Simétrico */
+.inactivity-save-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.inactivity-save-btn:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 480px) {
+  .inactivity-settings-card {
+    padding: 16px 14px;
+    gap: 15px;
+    border-radius: 16px;
+  }
+
+  .inactivity-unit-btn {
+    padding: 9px 8px;
+    font-size: 12.5px;
+  }
+
+  .inactivity-step-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    font-size: 20px;
+  }
+
+  .inactivity-number-input {
+    font-size: 30px;
+    max-width: 80px;
+  }
+
+  .inactivity-presets-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .inactivity-preset-btn {
+    padding: 8px 4px;
+    font-size: 11.5px;
+  }
+
+  .inactivity-save-btn {
+    height: 46px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 350px) {
+  .inactivity-presets-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ========================================================================== */
+/* 🎨 MODO CLARO PREMIUM: PALETA DE COLORES PASTEL Y VIVOS PARA EL SISTEMA POS */
+/*    (Afecta ÚNICAMENTE al Sistema Principal en Modo Claro - Excluye Dark, Tienda, Login y SuperAdmin) */
+/* ========================================================================== */
+
+/* 1. Lienzo Principal y Fondo del Sistema */
+[data-theme="light"] .pos-layout {
+  background: linear-gradient(180deg, #f0f4f9 0%, #f6f8fb 100%) !important;
+}
+
+[data-theme="light"] .main-content {
+  background: transparent !important;
+}
+
+/* 2. Barra Lateral (Sidebar) en Modo Claro */
+[data-theme="light"] .sidebar {
+  background: #ffffff !important;
+  border-right: 1.5px solid #e2e8f0 !important;
+  box-shadow: 2px 0 16px rgba(15, 23, 42, 0.03) !important;
+}
+
+[data-theme="light"] .nav-item {
+  color: #475569 !important;
+  font-weight: 600 !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+}
+
+[data-theme="light"] .nav-item:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  transform: translateX(2px) !important;
+}
+
+[data-theme="light"] .nav-item.active {
+  background: linear-gradient(90deg, #fff1f2 0%, #ffe4e6 100%) !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecdd3 !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="light"] .nav-item.active .nav-icon {
+  color: #dc2626 !important;
+}
+
+[data-theme="light"] .nav-item.active::before {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%) !important;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.45) !important;
+}
+
+/* 3. Barra Superior (Top Navbar) en Modo Claro */
+[data-theme="light"] .top-navbar {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(14px) !important;
+  border-bottom: 1.5px solid #e2e8f0 !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03) !important;
+}
+
+[data-theme="light"] .date-badge {
+  background: #eef2ff !important;
+  color: #4338ca !important;
+  border: 1px solid #c7d2fe !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="light"] .caja-status.abierta {
+  background-color: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1.5px solid #86efac !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;
+}
+
+[data-theme="light"] .caja-status.cerrada {
+  background-color: #ffe4e6 !important;
+  color: #b91c1c !important;
+  border: 1.5px solid #fca5a5 !important;
+}
+
+[data-theme="light"] .theme-toggle-btn {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+[data-theme="light"] .notification-bell-btn {
+  background: #f8fafc !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+/* 4. Tarjetas Base y Variantes de Color Pastel con Bordes Vivos */
+[data-theme="light"] .card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 18px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+[data-theme="light"] .card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .card-tint-blue {
+  background: linear-gradient(155deg, #ffffff 40%, #f0f7ff 75%, #e0f2fe 100%) !important;
+  border: 1.5px solid #bae6fd !important;
+  box-shadow: 0 6px 20px -3px rgba(37, 99, 235, 0.08) !important;
+}
+[data-theme="light"] .card-tint-blue::before {
+  background: linear-gradient(90deg, #38bdf8, #2563eb) !important;
+  height: 4px !important;
+}
+
+[data-theme="light"] .card-tint-green {
+  background: linear-gradient(155deg, #ffffff 40%, #f2fcf6 75%, #dcfce7 100%) !important;
+  border: 1.5px solid #bbf7d0 !important;
+  box-shadow: 0 6px 20px -3px rgba(16, 185, 129, 0.08) !important;
+}
+[data-theme="light"] .card-tint-green::before {
+  background: linear-gradient(90deg, #34d399, #059669) !important;
+  height: 4px !important;
+}
+
+[data-theme="light"] .card-tint-gold {
+  background: linear-gradient(155deg, #ffffff 40%, #fffdf0 75%, #fef3c7 100%) !important;
+  border: 1.5px solid #fde68a !important;
+  box-shadow: 0 6px 20px -3px rgba(245, 158, 11, 0.08) !important;
+}
+[data-theme="light"] .card-tint-gold::before {
+  background: linear-gradient(90deg, #fbbf24, #d97706) !important;
+  height: 4px !important;
+}
+
+[data-theme="light"] .card-tint-red {
+  background: linear-gradient(155deg, #ffffff 40%, #fff5f5 75%, #ffe4e6 100%) !important;
+  border: 1.5px solid #fecdd3 !important;
+  box-shadow: 0 6px 20px -3px rgba(220, 38, 38, 0.08) !important;
+}
+[data-theme="light"] .card-tint-red::before {
+  background: linear-gradient(90deg, #fb7185, #dc2626) !important;
+  height: 4px !important;
+}
+
+/* 5. Tarjetas de Métricas (Dashboard) en Modo Claro */
+[data-theme="light"] .metric-card {
+  padding: 24px !important;
+  border-radius: var(--radius-xl) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+[data-theme="light"] .metric-card:hover {
+  transform: translateY(-4px) !important;
+}
+
+[data-theme="light"] .metric-card.card-tint-blue {
+  background: linear-gradient(155deg, #ffffff 40%, #eff6ff 75%, #dbeafe 100%) !important;
+  border: 1.5px solid #bfdbfe !important;
+}
+[data-theme="light"] .metric-card.card-tint-blue .card-title {
+  color: #1e40af !important;
+  font-weight: 800 !important;
+}
+[data-theme="light"] .metric-card.card-tint-blue .metric-value {
+  color: #1d4ed8 !important;
+}
+[data-theme="light"] .metric-card.card-tint-blue .nav-icon {
+  background: #dbeafe !important;
+  color: #2563eb !important;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+[data-theme="light"] .metric-card.card-tint-gold {
+  background: linear-gradient(155deg, #ffffff 40%, #fffbeb 75%, #fef3c7 100%) !important;
+  border: 1.5px solid #fde68a !important;
+}
+[data-theme="light"] .metric-card.card-tint-gold .card-title {
+  color: #92400e !important;
+  font-weight: 800 !important;
+}
+[data-theme="light"] .metric-card.card-tint-gold .metric-value {
+  color: #b45309 !important;
+}
+[data-theme="light"] .metric-card.card-tint-gold .nav-icon {
+  background: #fef3c7 !important;
+  color: #d97706 !important;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+[data-theme="light"] .metric-card.card-tint-red {
+  background: linear-gradient(155deg, #ffffff 40%, #fff1f2 75%, #ffe4e6 100%) !important;
+  border: 1.5px solid #fecdd3 !important;
+}
+[data-theme="light"] .metric-card.card-tint-red .card-title {
+  color: #991b1b !important;
+  font-weight: 800 !important;
+}
+[data-theme="light"] .metric-card.card-tint-red .metric-value {
+  color: #dc2626 !important;
+}
+[data-theme="light"] .metric-card.card-tint-red .nav-icon {
+  background: #ffe4e6 !important;
+  color: #dc2626 !important;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+[data-theme="light"] .metric-card.card-tint-green {
+  background: linear-gradient(155deg, #ffffff 40%, #ecfdf5 75%, #d1fae5 100%) !important;
+  border: 1.5px solid #a7f3d0 !important;
+}
+[data-theme="light"] .metric-card.card-tint-green .card-title {
+  color: #065f46 !important;
+  font-weight: 800 !important;
+}
+[data-theme="light"] .metric-card.card-tint-green .metric-value {
+  color: #059669 !important;
+}
+[data-theme="light"] .metric-card.card-tint-green .nav-icon {
+  background: #d1fae5 !important;
+  color: #059669 !important;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+/* 6. Botones de Acciones Rápidas (Dashboard) en Modo Claro */
+[data-theme="light"] .quick-actions-grid .btn.btn-primary {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28) !important;
+}
+[data-theme="light"] .quick-actions-grid .btn.btn-primary:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.38) !important;
+}
+
+[data-theme="light"] .quick-actions-grid .btn.btn-secondary {
+  background: #eef2ff !important;
+  color: #3730a3 !important;
+  border: 1.5px solid #c7d2fe !important;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08) !important;
+}
+[data-theme="light"] .quick-actions-grid .btn.btn-secondary:hover {
+  background: #e0e7ff !important;
+  border-color: #a5b4fc !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15) !important;
+}
+
+[data-theme="light"] .quick-actions-grid .btn.btn-danger {
+  background: #fff1f2 !important;
+  color: #be123c !important;
+  border: 1.5px solid #fecdd3 !important;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.08) !important;
+}
+[data-theme="light"] .quick-actions-grid .btn.btn-danger:hover {
+  background: #ffe4e6 !important;
+  border-color: #fda4af !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.15) !important;
+}
+
+[data-theme="light"] .quick-actions-grid .btn.btn-gold {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.28) !important;
+}
+[data-theme="light"] .quick-actions-grid .btn.btn-gold:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* 7. Tablas y Filas en Modo Claro */
+[data-theme="light"] .table-container,
+[data-theme="light"] .data-table {
+  background: #ffffff !important;
+  border-radius: 14px !important;
+}
+
+[data-theme="light"] .data-table th,
+[data-theme="light"] table th {
+  background: #f8fafc !important;
+  color: #334155 !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="light"] .data-table tr:nth-child(even) {
+  background-color: #fbfdff !important;
+}
+
+[data-theme="light"] .data-table tr:hover {
+  background-color: #eff6ff !important;
+}
+
+[data-theme="light"] .data-table td {
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+/* 8. Insignias y Estados (Badges) */
+[data-theme="light"] .badge.badge-success,
+[data-theme="light"] .badge-delivered {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #86efac !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="light"] .badge.badge-pending,
+[data-theme="light"] .badge-warning {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="light"] .badge.badge-danger,
+[data-theme="light"] .badge-cancelled {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="light"] .badge.badge-info {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+  font-weight: 800 !important;
+}
+
+/* 9. Módulo Inventario: Tarjetas de Producto con Vida */
+[data-theme="light"] .inventory-card-item {
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04) !important;
+  transition: all 0.25s ease !important;
+}
+
+[data-theme="light"] .inventory-card-item:hover {
+  border-color: #fca5a5 !important;
+  box-shadow: 0 12px 24px -4px rgba(220, 38, 38, 0.1) !important;
+  transform: translateY(-3px) !important;
+}
+
+[data-theme="light"] .inventory-filter-tabs {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+[data-theme="light"] .inventory-filter-tabs .filter-tab.active {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25) !important;
+}
+
+[data-theme="light"] .inventory-discount-badge {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35) !important;
+}
+
+[data-theme="light"] .inventory-final-price {
+  color: #dc2626 !important;
+}
+
+[data-theme="light"] .inventory-action-btn.btn-edit {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+}
+[data-theme="light"] .inventory-action-btn.btn-edit:hover {
+  background: #dbeafe !important;
+}
+
+[data-theme="light"] .inventory-delete-btn {
+  background: #fff1f2 !important;
+  color: #e11d48 !important;
+  border: 1px solid #fecdd3 !important;
+}
+[data-theme="light"] .inventory-delete-btn:hover {
+  background: #ffe4e6 !important;
+}
+
+/* 10. Módulo Contabilidad / Caja en Modo Claro */
+[data-theme="light"] .contabilidad-summary-card {
+  border-radius: 18px !important;
+  box-shadow: 0 6px 20px -3px rgba(15, 23, 42, 0.06) !important;
+}
+
+[data-theme="light"] .contabilidad-summary-card.card-tint-green {
+  background: linear-gradient(155deg, #ffffff 40%, #f0fdf4 75%, #dcfce7 100%) !important;
+  border: 1.5px solid #a7f3d0 !important;
+}
+
+[data-theme="light"] .contabilidad-summary-card.card-tint-red {
+  background: linear-gradient(155deg, #ffffff 40%, #fff5f5 75%, #ffe4e6 100%) !important;
+  border: 1.5px solid #fecdd3 !important;
+}
+
+[data-theme="light"] .contabilidad-summary-card.card-tint-blue {
+  background: linear-gradient(155deg, #ffffff 40%, #f0f7ff 75%, #e0f2fe 100%) !important;
+  border: 1.5px solid #bae6fd !important;
+}
+
+[data-theme="light"] .btn-venta-pos {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
+}
+[data-theme="light"] .btn-venta-pos:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  transform: translateY(-2px) !important;
+}
+
+[data-theme="light"] .btn-gasto-pos {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3) !important;
+}
+[data-theme="light"] .btn-gasto-pos:hover {
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
+  transform: translateY(-2px) !important;
+}
+
+[data-theme="light"] .activity-item,
+[data-theme="light"] .mobile-transaction-item {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-theme="light"] .activity-item:hover,
+[data-theme="light"] .mobile-transaction-item:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .mobile-trx-icon.income {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+[data-theme="light"] .mobile-trx-icon.expense {
+  background: #ffe4e6 !important;
+  color: #dc2626 !important;
+}
+
+/* 11. Módulo Perfil en Modo Claro */
+[data-theme="light"] .profile-sidebar-card {
+  background: #ffffff !important;
+  border: 1.5px solid #e2e8f0 !important;
+}
+
+[data-theme="light"] .profile-nav-item {
+  color: #475569 !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+
+[data-theme="light"] .profile-nav-item:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .profile-nav-item.active {
+  background: #fff1f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecdd3 !important;
+  font-weight: 700 !important;
+}
+
+/* 12. Barra de Navegación Móvil Inferior */
+[data-theme="light"] .mobile-bottom-nav {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(14px) !important;
+  border-top: 1.5px solid #e2e8f0 !important;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.05) !important;
+}
+
+[data-theme="light"] .mobile-bottom-nav-item {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .mobile-bottom-nav-item.active {
+  color: #dc2626 !important;
+}
+
+
 

@@ -152,6 +152,77 @@ const DEFAULT_PROFILE = {
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api'
 
+// ⏱️ Seguridad y Gestión de Sesión: Cierre automático por inactividad configurable
+const SESSION_SETTINGS_KEY = 'el_buen_corte_inactivity_settings'
+const DEFAULT_INACTIVITY_CONFIG = { value: 5, unit: 'minutos' }
+const SESSION_ACTIVITY_KEY = 'el_buen_corte_last_activity'
+
+// Helper para obtener los milisegundos de inactividad configurados por el usuario
+const getInactivityTimeoutMs = () => {
+  try {
+    const saved = localStorage.getItem(SESSION_SETTINGS_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      const num = parseInt(parsed.value, 10)
+      if (!isNaN(num) && num > 0) {
+        if (parsed.unit === 'horas') {
+          return num * 60 * 60 * 1000
+        }
+        return num * 60 * 1000
+      }
+    }
+  } catch (e) {}
+  return 5 * 60 * 1000 // 5 minutos por defecto
+}
+
+// Helper para leer la configuración (número y unidad)
+const getInactivityConfig = () => {
+  try {
+    const saved = localStorage.getItem(SESSION_SETTINGS_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      const num = parseInt(parsed.value, 10)
+      if (!isNaN(num) && num > 0) {
+        return {
+          value: Math.min(99, Math.max(1, num)),
+          unit: parsed.unit === 'horas' ? 'horas' : 'minutos'
+        }
+      }
+    }
+  } catch (e) {}
+  return { ...DEFAULT_INACTIVITY_CONFIG }
+}
+
+// Verificación inicial síncrona antes de renderizar para impedir ingreso directo si estuvo cerrado > tiempo configurado
+const checkInitialSession = () => {
+  try {
+    const token = localStorage.getItem('el_buen_corte_token')
+    const userStr = localStorage.getItem('el_buen_corte_user')
+    if (!token && !userStr) {
+      return { user: null, token: '', isExpired: false }
+    }
+    const lastActivity = localStorage.getItem(SESSION_ACTIVITY_KEY)
+    const now = Date.now()
+    const timeoutMs = getInactivityTimeoutMs()
+    // Si hay datos de sesión pero no hay registro de actividad o han transcurrido más del tiempo límite configurado:
+    if (!lastActivity || (now - Number(lastActivity)) > timeoutMs) {
+      localStorage.removeItem('el_buen_corte_token')
+      localStorage.removeItem('el_buen_corte_user')
+      localStorage.removeItem('el_buen_corte_profile')
+      localStorage.removeItem(SESSION_ACTIVITY_KEY)
+      return { user: null, token: '', isExpired: true }
+    }
+    const user = userStr ? JSON.parse(userStr) : null
+    return { user, token: token || '', isExpired: false }
+  } catch (e) {
+    localStorage.removeItem('el_buen_corte_token')
+    localStorage.removeItem('el_buen_corte_user')
+    localStorage.removeItem('el_buen_corte_profile')
+    localStorage.removeItem(SESSION_ACTIVITY_KEY)
+    return { user: null, token: '', isExpired: false }
+  }
+}
+
 // 🔔 Reproductor de sonido y voz sintetizada para nuevo pedido
 export const playOrderVoiceNotification = (customText = "Tienes un nuevo pedido") => {
   try {
@@ -256,6 +327,7 @@ function PosAdminSystem() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
     localStorage.setItem('app_theme', theme);
   }, [theme]);
 
@@ -654,21 +726,63 @@ function PosAdminSystem() {
   const [orderFilter, setOrderFilter] = useState('Todos')
   const [inventoryFilter, setInventoryFilter] = useState('Todos')
 
-  // Authentication State
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('el_buen_corte_user')
-      return saved ? JSON.parse(saved) : null
-    } catch (e) {
-      localStorage.removeItem('el_buen_corte_user')
-      return null
-    }
-  })
-  const [authToken, setAuthToken] = useState(() => localStorage.getItem('el_buen_corte_token') || '')
+  // Authentication State (con verificación de expiración por inactividad / sistema cerrado)
+  const initialSession = useMemo(() => checkInitialSession(), [])
+  const [currentUser, setCurrentUser] = useState(() => initialSession.user)
+  const [authToken, setAuthToken] = useState(() => initialSession.token)
   const [authLoading, setAuthLoading] = useState(false)
-  const [authError, setAuthError] = useState('')
+  const [authError, setAuthError] = useState(() => 
+    initialSession.isExpired ? 'Tu sesión ha expirado tras el tiempo límite de inactividad o cierre. Por favor ingresa nuevamente.' : ''
+  )
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  // ⚙️ Ajustes del Sistema: Configuración de tiempo de inactividad
+  const [inactivityConfig, setInactivityConfig] = useState(() => getInactivityConfig())
+  const [inactivityInputValue, setInactivityInputValue] = useState(() => String(getInactivityConfig().value))
+  const [inactivityUnit, setInactivityUnit] = useState(() => getInactivityConfig().unit)
+  const [settingsSuccessMessage, setSettingsSuccessMessage] = useState('')
+
+  const handleInactivityInputChange = (e) => {
+    // Máximo 2 dígitos numéricos permitidos
+    const val = e.target.value.replace(/\D/g, '').slice(0, 2)
+    setInactivityInputValue(val)
+  }
+
+  const handleStepInactivity = (delta) => {
+    const current = parseInt(inactivityInputValue || '1', 10)
+    let next = isNaN(current) ? 5 : current + delta
+    if (next < 1) next = 1
+    if (next > 99) next = 99
+    setInactivityInputValue(String(next))
+  }
+
+  const handleSaveInactivitySettings = (e) => {
+    if (e) e.preventDefault()
+    const num = parseInt(inactivityInputValue, 10)
+    if (isNaN(num) || num <= 0) {
+      alert('Por favor ingresa un número válido del 1 al 99.')
+      return
+    }
+    const newCfg = {
+      value: num,
+      unit: inactivityUnit === 'horas' ? 'horas' : 'minutos'
+    }
+    localStorage.setItem(SESSION_SETTINGS_KEY, JSON.stringify(newCfg))
+    setInactivityConfig(newCfg)
+    setSettingsSuccessMessage(`✅ Tiempo de inactividad configurado: ${num} ${newCfg.unit}.`)
+    setTimeout(() => setSettingsSuccessMessage(''), 5000)
+  }
+
+  const handlePresetClick = (val, unit) => {
+    const newCfg = { value: val, unit }
+    setInactivityInputValue(String(val))
+    setInactivityUnit(unit)
+    localStorage.setItem(SESSION_SETTINGS_KEY, JSON.stringify(newCfg))
+    setInactivityConfig(newCfg)
+    setSettingsSuccessMessage(`✅ Tiempo de inactividad configurado: ${val} ${unit}.`)
+    setTimeout(() => setSettingsSuccessMessage(''), 5000)
+  }
 
   // Auth Inputs
   const [loginUsername, setLoginUsername] = useState('')
@@ -747,6 +861,7 @@ function PosAdminSystem() {
 
       localStorage.setItem('el_buen_corte_token', data.token)
       localStorage.setItem('el_buen_corte_user', JSON.stringify(data.user))
+      localStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()))
       setAuthToken(data.token)
       setCurrentUser(data.user)
       if (data.user.rol === 'superadmin') {
@@ -868,12 +983,14 @@ function PosAdminSystem() {
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = (reason = '') => {
     localStorage.removeItem('el_buen_corte_token')
     localStorage.removeItem('el_buen_corte_user')
     localStorage.removeItem('el_buen_corte_profile')
+    localStorage.removeItem(SESSION_ACTIVITY_KEY)
     setAuthToken('')
     setCurrentUser(null)
+    setLoginPassword('')
     setInventario([])
     setPedidos([])
     setTransacciones([])
@@ -885,6 +1002,9 @@ function PosAdminSystem() {
     setProfileData(DEFAULT_PROFILE)
     setProfileForm(DEFAULT_PROFILE)
     setActiveTab('resumen')
+    if (reason && typeof reason === 'string') {
+      setAuthError(reason)
+    }
   }
 
   // Fetch notificaciones desde el backend y detectar nuevos pedidos
@@ -980,11 +1100,14 @@ function PosAdminSystem() {
           })
           if (!res.ok) {
             console.warn('Token de autenticación expirado o inválido. Limpiando sesión.')
-            handleLogout()
+            handleLogout('Tu sesión ha expirado en el servidor. Por favor ingresa nuevamente.')
           } else {
             const data = await res.json()
             if (data.user) {
               setCurrentUser(data.user)
+              try {
+                localStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()))
+              } catch (e) {}
             }
           }
         } catch (e) {
@@ -994,6 +1117,89 @@ function PosAdminSystem() {
     }
     checkActiveSession()
   }, [])
+
+  // ⏱️ Monitoreo activo de inactividad y sistema cerrado (+5 minutos)
+  useEffect(() => {
+    if (!currentUser) return
+
+    let lastWriteTime = Date.now()
+
+    const recordActivity = () => {
+      const now = Date.now()
+      // Throttle: escribir a localStorage a lo sumo una vez cada 5 segundos para máximo rendimiento
+      if (now - lastWriteTime > 5000) {
+        lastWriteTime = now
+        try {
+          localStorage.setItem(SESSION_ACTIVITY_KEY, String(now))
+        } catch (e) {}
+      }
+    }
+
+    const checkExpiration = () => {
+      try {
+        const lastStr = localStorage.getItem(SESSION_ACTIVITY_KEY)
+        const timeoutMs = getInactivityTimeoutMs()
+        const cfg = getInactivityConfig()
+        const timeFormatted = `${cfg.value} ${cfg.unit}`
+        if (!lastStr) {
+          handleLogout(`Tu sesión ha expirado tras más de ${timeFormatted} de inactividad. Por favor ingresa nuevamente.`)
+          return
+        }
+        const last = Number(lastStr)
+        if (Date.now() - last > timeoutMs) {
+          handleLogout(`Tu sesión ha expirado tras más de ${timeFormatted} de inactividad. Por favor ingresa nuevamente.`)
+        }
+      } catch (e) {
+        handleLogout()
+      }
+    }
+
+    // Interacción del usuario: clics, teclado, mouse, toques táctiles, scroll
+    const userEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
+    userEvents.forEach(evt => window.addEventListener(evt, recordActivity, { passive: true }))
+
+    // Al volver a la pestaña (visibilidad activa) o cuando pasa a segundo plano
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkExpiration()
+      } else {
+        try {
+          localStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()))
+        } catch (e) {}
+      }
+    }
+
+    // Al cerrar o refrescar la ventana / pestaña
+    const handleWindowUnload = () => {
+      try {
+        localStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()))
+      } catch (e) {}
+    }
+
+    // Sincronización entre múltiples pestañas abiertas
+    const handleStorageChange = (e) => {
+      if (e.key === 'el_buen_corte_token' && !e.newValue) {
+        handleLogout()
+      }
+    }
+
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('beforeunload', handleWindowUnload)
+    window.addEventListener('pagehide', handleWindowUnload)
+    window.addEventListener('storage', handleStorageChange)
+
+    // Intervalo de seguridad cada 10 segundos para desconectar si se deja el sistema solo
+    const timerId = setInterval(checkExpiration, 10000)
+
+    return () => {
+      userEvents.forEach(evt => window.removeEventListener(evt, recordActivity))
+      window.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', handleWindowUnload)
+      window.removeEventListener('pagehide', handleWindowUnload)
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(timerId)
+    }
+  }, [currentUser])
 
   // Cerrar menú de notificaciones al hacer clic afuera
   useEffect(() => {
@@ -2636,6 +2842,56 @@ function PosAdminSystem() {
             )}
           </a>
 
+          {/* Botón Ajustes del Sistema (Ubicado entre Visitar Tienda y Cerrar Sesión) */}
+          <button
+            type="button"
+            className={`nav-item sidebar-settings-btn ${activeTab === 'ajustes' ? 'active' : ''}`}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: activeTab === 'ajustes' 
+                ? '1px solid #3b82f6' 
+                : (theme === 'dark' ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'),
+              background: activeTab === 'ajustes'
+                ? (theme === 'dark' ? 'rgba(59, 130, 246, 0.18)' : '#eff6ff')
+                : (theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+              color: activeTab === 'ajustes'
+                ? (theme === 'dark' ? '#93c5fd' : '#1d4ed8')
+                : 'inherit',
+              cursor: 'pointer',
+              marginBottom: '8px',
+              fontWeight: activeTab === 'ajustes' ? '700' : '600',
+              fontSize: '13px',
+              transition: 'all 0.2s ease',
+              textAlign: 'left'
+            }}
+            title="Ajustes del Sistema"
+            onClick={() => { setActiveTab('ajustes'); setMobileMenuOpen(false); }}
+          >
+            <span className="nav-icon" style={{ display: 'flex', alignItems: 'center' }}>
+              <SlidersIcon style={{ width: '18px', height: '18px', color: activeTab === 'ajustes' ? '#3b82f6' : 'currentColor' }} />
+            </span>
+            <span style={{ fontWeight: activeTab === 'ajustes' ? '700' : '600' }}>Ajustes del Sistema</span>
+            {!sidebarCollapsed && (
+              <span style={{
+                marginLeft: 'auto',
+                fontSize: '9px',
+                padding: '2px 5px',
+                borderRadius: '4px',
+                background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : '#e2e8f0',
+                color: theme === 'dark' ? '#cbd5e1' : '#64748b',
+                fontWeight: '700',
+                textTransform: 'uppercase'
+              }}>
+                Config
+              </span>
+            )}
+          </button>
+
           {/* Botón Cerrar Sesión */}
           <button 
             type="button" 
@@ -2682,6 +2938,7 @@ function PosAdminSystem() {
               {activeTab === 'calculadora' && 'Calculadora de Res'}
               {activeTab === 'contabilidad' && 'Caja & Contabilidad'}
               {activeTab === 'perfil' && 'Perfil del Negocio'}
+              {activeTab === 'ajustes' && 'Ajustes del Sistema'}
             </div>
           </div>
 
@@ -3376,30 +3633,28 @@ function PosAdminSystem() {
                               </p>
 
                               <div className="inventory-card-meta">
-                                <div>
+                                <div className="inventory-price-box">
                                   <div className="inventory-price-label">
-                                    Precio {getPriceUnitLabel(item.unidadMedida)}
+                                    Precio
                                   </div>
-                                  {hasDiscount ? (
-                                    <div>
+                                  <div className="inventory-price-values">
+                                    {hasDiscount && (
                                       <span className="inventory-old-price">
                                         {formatCOP(item.precioVenta)}
                                       </span>
-                                      <span className="inventory-final-price discount">
-                                        {formatCOP(finalPrice)}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <div className="inventory-final-price">
-                                      {formatCOP(item.precioVenta)}
-                                    </div>
-                                  )}
+                                    )}
+                                    <span className={`inventory-final-price ${hasDiscount ? 'discount' : ''}`}>
+                                      {formatCOP(finalPrice)}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 <div className="inventory-stock-box">
-                                  <div className="inventory-stock-label">Stock actual</div>
+                                  <div className="inventory-stock-label">Stock</div>
                                   <div className={`inventory-stock-val ${isLow ? 'low' : 'ok'}`}>
-                                    {formatStockDisplay(item.stock, item.unidadMedida)}
+                                    <span className="inventory-stock-num">
+                                      {formatStockDisplay(item.stock, item.unidadMedida)}
+                                    </span>
                                     {isLow && <span className="stock-critical-tag">⚠️ Crítico</span>}
                                   </div>
                                 </div>
@@ -3930,23 +4185,32 @@ function PosAdminSystem() {
           {/* 🏢 TAB: PERFIL DEL NEGOCIO */}
           {/* ================================================================= */}
           {activeTab === 'perfil' && (
-            <div className="card card-tint-blue" style={{ padding: "24px", position: "relative", overflow: "hidden" }}>
+            <div className="card card-tint-blue profile-main-card" style={{ position: "relative", overflow: "hidden" }}>
               <BrandWatermark size={300} style={{ right: '-20px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
               
               {hasUnsavedChanges && (
-                <div className="alert alert-warning animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '16px 20px', borderRadius: 'var(--radius-lg)', position: 'relative', zIndex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>⚠️</span>
-                    <div>
+                <div className="alert alert-warning animate-fade-in profile-unsaved-banner">
+                  <div className="profile-unsaved-info">
+                    <span className="profile-unsaved-icon">⚠️</span>
+                    <div className="profile-unsaved-text">
                       <strong>Tienes cambios sin guardar</strong> en la configuración del perfil.
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={() => setProfileForm(profileData)}>
+                  <div className="profile-unsaved-actions">
+                    <button 
+                      type="button"
+                      className="btn btn-secondary profile-unsaved-btn" 
+                      onClick={() => setProfileForm(profileData)}
+                    >
                       Descartar cambios
                     </button>
-                    <button className="btn btn-primary" style={{ padding: '6px 16px', fontSize: '13px' }} onClick={handleSaveProfile}>
-                      💾 Guardar cambios
+                    <button 
+                      type="button"
+                      className="btn btn-primary profile-unsaved-btn" 
+                      onClick={handleSaveProfile}
+                      disabled={saveProfileSubmitting}
+                    >
+                      {saveProfileSubmitting ? 'Guardando...' : '💾 Guardar cambios'}
                     </button>
                   </div>
                 </div>
@@ -5287,6 +5551,334 @@ function PosAdminSystem() {
                     })}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================= */}
+          {/* ⚙️ TAB: AJUSTES DEL SISTEMA (MÓDULO CONFIGURABLE Y MODULAR) */}
+          {/* ================================================================= */}
+          {activeTab === 'ajustes' && (
+            <div className="tab-pane-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Encabezado del Módulo */}
+              <div className="card card-tint-blue" style={{
+                padding: '24px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '16px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <BrandWatermark size={240} style={{ right: '-15px', bottom: '-20px', transform: 'rotate(-5deg)' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                      color: '#ffffff',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                    }}>
+                      <SlidersIcon style={{ width: '22px', height: '22px' }} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: '22px', fontWeight: '800', margin: 0, color: 'var(--text-main, #1e293b)' }}>
+                        Ajustes del Sistema
+                      </h2>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>
+                        Gestión global de seguridad, inactividad de sesión y preferencias del terminal POS
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    background: theme === 'dark' ? 'rgba(59, 130, 246, 0.2)' : '#e0f2fe',
+                    color: theme === 'dark' ? '#93c5fd' : '#0284c7',
+                    border: '1px solid currentColor'
+                  }}>
+                    ⚙️ Arquitectura Modular
+                  </span>
+                </div>
+              </div>
+
+              {/* Mensaje de Confirmación / Alerta Exitosa */}
+              {settingsSuccessMessage && (
+                <div className="alert alert-success animate-fade-in" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '14px 20px',
+                  borderRadius: '12px',
+                  background: theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
+                  border: '1px solid #10b981',
+                  color: theme === 'dark' ? '#6ee7b7' : '#065f46',
+                  fontWeight: '600',
+                  fontSize: '14px'
+                }}>
+                  <span style={{ fontSize: '18px' }}>✅</span>
+                  <span>{settingsSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* Contenido Principal de Ajustes: Grid de Tarjetas */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                
+                {/* 🔒 TARJETA 1: CIERRE DE SESIÓN POR INACTIVIDAD (SIMÉTRICA Y 100% RESPONSIVE) */}
+                <div className="card inactivity-settings-card">
+                  {/* Encabezado Simétrico */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>⏱️</span>
+                        <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0 }}>
+                          Cierre por Inactividad
+                        </h3>
+                      </div>
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: '#dcfce7',
+                        color: '#15803d',
+                        fontWeight: '800',
+                        textTransform: 'uppercase'
+                      }}>
+                        Activo
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', margin: 0, lineHeight: 1.5 }}>
+                      Cierra la sesión automáticamente para proteger el negocio si no detecta clics, toques o teclado.
+                    </p>
+                  </div>
+
+                  {/* Estado Actual Centrado y Simétrico */}
+                  <div style={{
+                    padding: '10px 16px',
+                    borderRadius: '12px',
+                    background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+                    border: '1px dashed var(--border-color, #cbd5e1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>
+                      Configuración activa:
+                    </span>
+                    <strong style={{ fontSize: '14px', color: 'var(--primary, #2563eb)' }}>
+                      🔒 {inactivityConfig.value} {inactivityConfig.unit}
+                    </strong>
+                  </div>
+
+                  {/* 1. Selector de Unidad Simétrico (50% Minutos / 50% Horas) */}
+                  <div>
+                    <span style={{ fontSize: '11.5px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted, #64748b)', display: 'block', marginBottom: '8px' }}>
+                      1. Selecciona la unidad:
+                    </span>
+                    <div className="inactivity-unit-toggle">
+                      <button
+                        type="button"
+                        className={`inactivity-unit-btn ${inactivityUnit === 'minutos' ? 'active' : ''}`}
+                        onClick={() => setInactivityUnit('minutos')}
+                      >
+                        <span>⏱️</span>
+                        <span>Minutos</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`inactivity-unit-btn ${inactivityUnit === 'horas' ? 'active' : ''}`}
+                        onClick={() => setInactivityUnit('horas')}
+                      >
+                        <span>⏳</span>
+                        <span>Horas</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. Control Numérico Stepper Simétrico con Entrada Táctil y Directa */}
+                  <div>
+                    <span style={{ fontSize: '11.5px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted, #64748b)', display: 'block', marginBottom: '8px' }}>
+                      2. Ajusta la cantidad de tiempo:
+                    </span>
+                    <div className="inactivity-stepper-box">
+                      {/* Botón Disminuir (-) */}
+                      <button
+                        type="button"
+                        className="inactivity-step-btn"
+                        onClick={() => handleStepInactivity(-1)}
+                        title="Disminuir tiempo"
+                        aria-label="Disminuir tiempo"
+                      >
+                        −
+                      </button>
+
+                      {/* Display Central Simétrico con Edición Directa (Máx 2 Caracteres) */}
+                      <div className="inactivity-display-center">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={2}
+                          value={inactivityInputValue}
+                          onChange={handleInactivityInputChange}
+                          className="inactivity-number-input"
+                          placeholder="5"
+                          aria-label="Cantidad de tiempo"
+                        />
+                        <span className="inactivity-display-unit-label">
+                          {inactivityUnit === 'horas' ? (Number(inactivityInputValue) === 1 ? 'hora' : 'horas') : 'minutos'}
+                        </span>
+                      </div>
+
+                      {/* Botón Aumentar (+) */}
+                      <button
+                        type="button"
+                        className="inactivity-step-btn"
+                        onClick={() => handleStepInactivity(1)}
+                        title="Aumentar tiempo"
+                        aria-label="Aumentar tiempo"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '11px', color: '#94a3b8', marginTop: '6px' }}>
+                      Toca el número para escribir directamente (1 a 99) o usa <strong>−</strong> y <strong>+</strong>
+                    </div>
+                  </div>
+
+                  {/* 3. Atajos Rápidos Simétricos en Rejilla 3x2 */}
+                  <div>
+                    <span style={{ fontSize: '11.5px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted, #64748b)', display: 'block', marginBottom: '8px' }}>
+                      3. O elige un atajo recomendado:
+                    </span>
+                    <div className="inactivity-presets-grid">
+                      {[
+                        { val: 5, unit: 'minutos', label: '5 min' },
+                        { val: 15, unit: 'minutos', label: '15 min' },
+                        { val: 30, unit: 'minutos', label: '30 min' },
+                        { val: 1, unit: 'horas', label: '1 hora' },
+                        { val: 2, unit: 'horas', label: '2 horas' },
+                        { val: 4, unit: 'horas', label: '4 horas' }
+                      ].map((preset) => {
+                        const isSelected = Number(inactivityInputValue) === preset.val && inactivityUnit === preset.unit
+                        return (
+                          <button
+                            key={`${preset.val}-${preset.unit}`}
+                            type="button"
+                            className={`inactivity-preset-btn ${isSelected ? 'active' : ''}`}
+                            onClick={() => handlePresetClick(preset.val, preset.unit)}
+                          >
+                            {preset.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Botón Guardar Simétrico de Ancho Completo */}
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-primary inactivity-save-btn"
+                      onClick={handleSaveInactivitySettings}
+                    >
+                      <span>💾</span> Guardar Configuración
+                    </button>
+                  </div>
+
+                  {/* Nota Explicativa */}
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    background: theme === 'dark' ? 'rgba(59, 130, 246, 0.08)' : '#eff6ff',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    fontSize: '11.5px',
+                    color: theme === 'dark' ? '#93c5fd' : '#1e40af',
+                    lineHeight: 1.45,
+                    textAlign: 'center'
+                  }}>
+                    💡 El temporizador se reinicia con cualquier toque o clic. Al cumplirse el tiempo sin uso, la sesión se cerrará automáticamente.
+                  </div>
+                </div>
+
+                {/* 🛡️ TARJETA 2: DIAGNÓSTICO DEL SISTEMA Y SESIÓN */}
+                <div className="card" style={{
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                  borderRadius: '16px',
+                  border: '1px solid var(--border-color, #e2e8f0)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>🛡️</span>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0 }}>
+                      Estado del Terminal y Sesión
+                    </h3>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>Usuario actual:</span>
+                      <strong style={{ fontSize: '13px' }}>{currentUser?.nombre || currentUser?.username || 'Usuario Autorizado'}</strong>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>Rol en sistema:</span>
+                      <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '6px', background: '#e0e7ff', color: '#4338ca', fontWeight: '700' }}>
+                        {currentUser?.rol || 'Administrador'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>ID de Comercio / Tenant:</span>
+                      <strong style={{ fontSize: '13px' }}>#{currentUser?.tenant_id || 1}</strong>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>Modo de Almacenamiento:</span>
+                      <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: '700' }}>Local Seguro (Cifrado)</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)' }}>Detección de Pantalla:</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted, #64748b)' }}>{typeof window !== 'undefined' ? `${window.innerWidth} x ${window.innerHeight} px` : 'Detectando...'}</span>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    marginTop: 'auto',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                    border: '1px solid var(--border-color, #e2e8f0)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <strong style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted, #64748b)' }}>
+                      Módulo de Ajustes Escalable
+                    </strong>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted, #64748b)', margin: 0, lineHeight: 1.4 }}>
+                      Este módulo está preparado para recibir futuras configuraciones de impresión de tickets, alertas personalizadas, integraciones de hardware y facturación electrónica a medida que tu negocio crezca.
+                    </p>
+                  </div>
+                </div>
+
               </div>
             </div>
           )}

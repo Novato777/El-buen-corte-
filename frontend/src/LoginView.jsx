@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   SunIcon,
   MoonIcon,
@@ -25,7 +25,14 @@ export default function LoginView({
   theme, toggleTheme
 }) {
   const [loginMode, setLoginMode] = useState('regular') // 'regular' | 'superadmin'
-  const [showLogin, setShowLogin] = useState(false)
+  const [showLogin, setShowLogin] = useState(() => Boolean(authError))
+
+  // Si se genera un error de sesión expirada, mostrar inmediatamente el formulario
+  useEffect(() => {
+    if (authError) {
+      setShowLogin(true)
+    }
+  }, [authError])
 
   if (!showLogin) {
     return (

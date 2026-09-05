@@ -141,7 +141,7 @@ export function formatStockDisplay(stockVal, unit) {
   const num = Number(stockVal) || 0
 
   if (norm === 'und') {
-    return `${Math.round(num)} ${Math.round(num) === 1 ? 'unidad' : 'unidades'}`
+    return `${Math.round(num)} und`
   }
 
   if (norm === 'kg') {
